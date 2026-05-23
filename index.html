@@ -215,106 +215,466 @@ const fn={dash:pgDash,anoLet:pgAnoLet,classes:pgClasses,turmas:pgTurmas,turnos:p
 if(fn[s])fn[s]();else $('eC').innerHTML='<div class="card"><div class="card-b">Página não encontrada</div></div>'}
 
 // FIM DO BLOCO 1 - Continua no BLOCO 2
-// ===== DASHBOARD =====
-async function pgDash(){const[als,uss]=await Promise.all([db.collection('escolas').doc(CSI).collection('alunos').get(),db.collection('escolas').doc(CSI).collection('usuarios').get()]);let m=0,f=0,at=0;const byCl={};als.forEach(d=>{const a=d.data();a.genero==='M'?m++:f++;if(a.estado==='ativo')at++;if(!byCl[a.classe])byCl[a.classe]=0;byCl[a.classe]++});const anos=await db.collection('escolas').doc(CSI).collection('anosLetivos').where('estado','==','aberto').get();let logsH='';if(CU.perfil==='director'){const logs=await db.collection('escolas').doc(CSI).collection('logs').orderBy('criadoEm','desc').limit(6).get();logs.forEach(d=>{const l=d.data();logsH+=`<div class="log-item"><span class="log-time">${l.data?new Date(l.data).toLocaleString('pt-AO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''}</span><strong>${l.usuario}</strong> — ${l.acao}</div>`})}$('eC').innerHTML=`<div class="sg"><div class="sc"><div class="sci bl">👨‍🎓</div><div class="scn"><h3>${als.size}</h3><p>Alunos (${m}♂/${f}♀)</p></div></div><div class="sc"><div class="sci gn">👨‍🏫</div><div class="scn"><h3>${uss.docs.filter(d=>d.data().perfil==='professor').length}</h3><p>Professores</p></div></div><div class="sc"><div class="sci or">✅</div><div class="scn"><h3>${at}</h3><p>Ativos</p></div></div><div class="sc"><div class="sci pp">📅</div><div class="scn"><h3 style="font-size:.8em">${anos.empty?'—':anos.docs[0].data().nome}</h3><p>Ano Letivo</p></div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="card"><div class="card-h"><h3>📊 Classes</h3></div><div class="card-b"><div style="height:180px"><canvas id="chD1"></canvas></div></div></div><div class="card"><div class="card-h"><h3>📊 Género</h3></div><div class="card-b"><div style="height:180px"><canvas id="chD2"></canvas></div></div></div></div>${logsH?`<div class="card"><div class="card-h"><h3>📋 Atividades</h3></div><div class="card-b">${logsH}</div></div>`:''}`;setTimeout(()=>{const cls=Object.keys(byCl).sort();drawChart('chD1','bar',cls,[{label:'Alunos',data:cls.map(c=>byCl[c]),backgroundColor:'#1565c0'}]);drawChart('chD2','doughnut',['Masc','Fem'],[{data:[m,f],backgroundColor:['#1565c0','#e65100']}])},100)}
+// ===== BLOCO 2 CORRIGIDO: Dashboard, Gestão (com Turnos), Atribuições, Pessoas com dados completos =====
 
-// ===== ANO LETIVO =====
-async function pgAnoLet(){const s=await db.collection('escolas').doc(CSI).collection('anosLetivos').orderBy('criadoEm','desc').get();let r='';s.forEach(d=>{const a=d.data();r+=`<tr><td>${a.nome}</td><td><span class="badge ${a.estado==='aberto'?'b-ok':'b-dg'}">${a.estado}</span></td><td>${a.trimestre||'—'}</td><td><span class="badge ${a.trimestreEstado==='aberto'?'b-ok':'b-wn'}">${a.trimestreEstado||'fechado'}</span></td><td>${a.estado==='aberto'?`<button class="btn btn-sm btn-wn" onclick="mTrim('${d.id}')">📅</button> <button class="btn btn-sm btn-s" onclick="fAno('${d.id}')">🔒</button>`:`<button class="btn btn-sm btn-ok" onclick="rAno('${d.id}')">🔓</button>`}</td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📅 Anos Letivos</h3><button class="btn btn-p" onclick="nAno()">➕</button></div><div class="card-b"><table><tr><th>Ano</th><th>Estado</th><th>Trim.</th><th>Est.</th><th></th></tr>${r||'<tr><td colspan="5">Nenhum</td></tr>'}</table></div></div>`}
-function nAno(){const y=new Date().getFullYear();$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Novo Ano</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Nome</label><input id="anN" value="${y}/${y+1}"></div></div><div class="mf"><button class="btn btn-p" onclick="cAno()">Criar</button></div>`;oM()}
-async function cAno(){const nm=$('anN').value.trim();if(!nm)return;const ab=await db.collection('escolas').doc(CSI).collection('anosLetivos').where('estado','==','aberto').get();for(const d of ab.docs)await d.ref.update({estado:'fechado',trimestreEstado:'fechado'});await db.collection('escolas').doc(CSI).collection('anosLetivos').add({nome:nm,estado:'aberto',trimestre:'1º Trimestre',trimestreEstado:'aberto',criadoEm:ts()});logAct('Criou ano: '+nm);cM();pgAnoLet()}
+// DASHBOARD
+async function pgDash(){const[als,uss]=await Promise.all([db.collection('escolas').doc(CSI).collection('alunos').get(),db.collection('escolas').doc(CSI).collection('usuarios').get()]);let m=0,f=0,at=0;const byCl={};als.forEach(d=>{const a=d.data();a.genero==='M'?m++:f++;if(a.estado==='ativo')at++;if(!byCl[a.classe])byCl[a.classe]=0;byCl[a.classe]++});const anos=await db.collection('escolas').doc(CSI).collection('anosLetivos').where('estado','==','aberto').get();let logsH='';if(CU.perfil==='director'){const logs=await db.collection('escolas').doc(CSI).collection('logs').orderBy('criadoEm','desc').limit(5).get();logs.forEach(d=>{const l=d.data();logsH+=`<div class="log-item"><span style="color:var(--txl);font-size:.68em;margin-right:4px">${l.data?new Date(l.data).toLocaleString('pt-AO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''}</span><strong>${l.usuario}</strong> — ${l.acao}</div>`})}$('eC').innerHTML=`<div class="sg"><div class="sc"><div class="sci bl">👨‍🎓</div><div class="scn"><h3>${als.size}</h3><p>Alunos (${m}♂/${f}♀)</p></div></div><div class="sc"><div class="sci gn">👨‍🏫</div><div class="scn"><h3>${uss.docs.filter(d=>d.data().perfil==='professor').length}</h3><p>Professores</p></div></div><div class="sc"><div class="sci or">✅</div><div class="scn"><h3>${at}</h3><p>Ativos</p></div></div><div class="sc"><div class="sci pp">📅</div><div class="scn"><h3 style="font-size:.75em">${anos.empty?'—':anos.docs[0].data().nome}</h3><p>Ano Letivo</p></div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><div class="card"><div class="card-h"><h3>📊 Classes</h3></div><div class="card-b"><div style="height:160px"><canvas id="chD1"></canvas></div></div></div><div class="card"><div class="card-h"><h3>📊 Género</h3></div><div class="card-b"><div style="height:160px"><canvas id="chD2"></canvas></div></div></div></div>${logsH?`<div class="card"><div class="card-h"><h3>📋 Atividades</h3></div><div class="card-b">${logsH}</div></div>`:''}`;setTimeout(()=>{const cls=Object.keys(byCl).sort();drawChart('chD1','bar',cls,[{label:'Alunos',data:cls.map(c=>byCl[c]),backgroundColor:'#1565c0'}]);drawChart('chD2','doughnut',['M','F'],[{data:[m,f],backgroundColor:['#1565c0','#e65100']}])},100)}
+
+// ANO LETIVO
+async function pgAnoLet(){const s=await db.collection('escolas').doc(CSI).collection('anosLetivos').orderBy('criadoEm','desc').get();let r='';s.forEach(d=>{const a=d.data();r+=`<tr><td>${a.nome}</td><td><span class="badge ${a.estado==='aberto'?'b-ok':'b-dg'}">${a.estado}</span></td><td>${a.trimestre||'—'}</td><td><span class="badge ${a.trimestreEstado==='aberto'?'b-ok':'b-wn'}">${a.trimestreEstado||'fechado'}</span></td><td>${a.estado==='aberto'?`<button class="btn btn-sm btn-wn" onclick="mTrim('${d.id}')">📅</button> <button class="btn btn-sm btn-s" onclick="fAno('${d.id}')">🔒</button>`:`<button class="btn btn-sm btn-ok" onclick="rAno('${d.id}')">🔓</button>`}</td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📅 Anos Letivos</h3><button class="btn btn-p" onclick="nAno()">➕</button></div><div class="card-b"><table><tr><th>Ano</th><th>Est.</th><th>Trim.</th><th>Est.T</th><th></th></tr>${r||'<tr><td colspan="5">—</td></tr>'}</table></div></div>`}
+function nAno(){const y=new Date().getFullYear();$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><input id="anN" value="${y}/${y+1}"></div></div><div class="mf"><button class="btn btn-p" onclick="cAno()">Criar</button></div>`;oM()}
+async function cAno(){const nm=$('anN').value.trim();if(!nm)return;const ab=await db.collection('escolas').doc(CSI).collection('anosLetivos').where('estado','==','aberto').get();for(const d of ab.docs)await d.ref.update({estado:'fechado',trimestreEstado:'fechado'});await db.collection('escolas').doc(CSI).collection('anosLetivos').add({nome:nm,estado:'aberto',trimestre:'1º Trimestre',trimestreEstado:'aberto',criadoEm:ts()});logAct('Ano: '+nm);cM();pgAnoLet()}
 async function fAno(id){await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(id).update({estado:'fechado',trimestreEstado:'fechado'});pgAnoLet()}
 async function rAno(id){const ab=await db.collection('escolas').doc(CSI).collection('anosLetivos').where('estado','==','aberto').get();for(const d of ab.docs)await d.ref.update({estado:'fechado'});await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(id).update({estado:'aberto'});pgAnoLet()}
-function mTrim(id){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>📅 Trimestre</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><select id="sT"><option>1º Trimestre</option><option>2º Trimestre</option><option>3º Trimestre</option></select></div><div class="btn-group"><button class="btn btn-ok" onclick="aT('${id}')">Abrir</button><button class="btn btn-s" onclick="fT('${id}')">Fechar</button></div></div>`;oM()}
+function mTrim(id){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>📅</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><select id="sT"><option>1º Trimestre</option><option>2º Trimestre</option><option>3º Trimestre</option></select></div><div class="btn-group"><button class="btn btn-ok" onclick="aT('${id}')">Abrir</button><button class="btn btn-s" onclick="fT('${id}')">Fechar</button></div></div>`;oM()}
 async function aT(id){await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(id).update({trimestre:$('sT').value,trimestreEstado:'aberto'});cM();pgAnoLet()}
 async function fT(id){await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(id).update({trimestreEstado:'fechado'});cM();pgAnoLet()}
 
-// ===== CLASSES, TURMAS, TURNOS, DISCIPLINAS =====
-async function pgClasses(){const s=await db.collection('escolas').doc(CSI).collection('classes').get();let r='';s.forEach(d=>{r+=`<tr><td>${d.data().nome}</td><td>${d.data().nivel||''}</td><td><button class="btn btn-sm btn-s" onclick="delC('classes','${d.id}',pgClasses)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>🏛️ Classes</h3><button class="btn btn-p" onclick="addCl()">➕</button></div><div class="card-b"><table><tr><th>Classe</th><th>Nível</th><th></th></tr>${r||'<tr><td colspan="3">Nenhuma</td></tr>'}</table></div></div>`}
-function addCl(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Classe</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fr"><div class="fg"><label>Classe</label><select id="clN"><option>1ª Classe</option><option>2ª Classe</option><option>3ª Classe</option><option>4ª Classe</option><option>5ª Classe</option><option>6ª Classe</option><option>7ª Classe</option><option>8ª Classe</option><option>9ª Classe</option><option>10ª Classe</option><option>11ª Classe</option><option>12ª Classe</option><option>13ª Classe</option></select></div><div class="fg"><label>Nível</label><select id="clV"><option>Primário</option><option>I Ciclo</option><option>II Ciclo</option></select></div></div></div><div class="mf"><button class="btn btn-p" onclick="svCl()">Criar</button></div>`;oM()}
+// CLASSES (com Iniciação)
+async function pgClasses(){const s=await db.collection('escolas').doc(CSI).collection('classes').get();let r='';s.forEach(d=>{r+=`<tr><td>${d.data().nome}</td><td>${d.data().nivel||''}</td><td><button class="btn btn-sm btn-s" onclick="delC('classes','${d.id}',pgClasses)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>🏛️ Classes</h3><button class="btn btn-p" onclick="addCl()">➕</button></div><div class="card-b"><table><tr><th>Classe</th><th>Nível</th><th></th></tr>${r||'<tr><td colspan="3">—</td></tr>'}</table></div></div>`}
+function addCl(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Classe</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fr"><div class="fg"><label>Classe</label><select id="clN">${CLASSES_ALL.map(c=>`<option>${c}</option>`).join('')}</select></div><div class="fg"><label>Nível</label><select id="clV"><option>Primário</option><option>I Ciclo</option><option>II Ciclo</option></select></div></div></div><div class="mf"><button class="btn btn-p" onclick="svCl()">Criar</button></div>`;oM()}
 async function svCl(){await db.collection('escolas').doc(CSI).collection('classes').add({nome:$('clN').value,nivel:$('clV').value});cM();pgClasses()}
 
-async function pgTurmas(){const s=await db.collection('escolas').doc(CSI).collection('turmas').get();let r='';s.forEach(d=>{const t=d.data();r+=`<tr><td>${t.nome}</td><td>${t.classe}</td><td>${t.turno||''}</td><td><button class="btn btn-sm btn-s" onclick="delC('turmas','${d.id}',pgTurmas)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>👥 Turmas</h3><button class="btn btn-p" onclick="addTm()">➕</button></div><div class="card-b"><table><tr><th>Turma</th><th>Classe</th><th>Turno</th><th></th></tr>${r||'<tr><td colspan="4">Nenhuma</td></tr>'}</table></div></div>`}
-async function addTm(){const[cs,tn]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('turnos').get()]);$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Turma</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fr"><div class="fg"><label>Nome</label><input id="tmN"></div><div class="fg"><label>Classe</label><select id="tmC">${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div></div><div class="fg"><label>Turno</label><select id="tmTn"><option value="">—</option>${tn.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div></div><div class="mf"><button class="btn btn-p" onclick="svTm()">Criar</button></div>`;oM()}
-async function svTm(){await db.collection('escolas').doc(CSI).collection('turmas').add({nome:$('tmN').value.trim(),classe:$('tmC').value,turno:$('tmTn').value});cM();pgTurmas()}
+// ===== TURNOS (RESTAURADO!) =====
+async function pgTurnos(){
+const s=await db.collection('escolas').doc(CSI).collection('turnos').get();
+let r='';s.forEach(d=>{const t=d.data();
+r+=`<tr><td>${t.nome}</td><td>${t.horario||''}</td><td><button class="btn btn-sm btn-s" onclick="delC('turnos','${d.id}',pgTurnos)">🗑️</button></td></tr>`});
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>🕐 Turnos</h3><button class="btn btn-p" onclick="addTurno()">➕ Novo Turno</button></div>
+<div class="card-b"><table><tr><th>Turno</th><th>Horário</th><th></th></tr>${r||'<tr><td colspan="3">Nenhum turno</td></tr>'}</table></div></div>`}
 
-async function pgTurnos(){const s=await db.collection('escolas').doc(CSI).collection('turnos').get();let r='';s.forEach(d=>{const t=d.data();r+=`<tr><td>${t.nome}</td><td>${t.horario||''}</td><td><button class="btn btn-sm btn-s" onclick="delC('turnos','${d.id}',pgTurnos)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>🕐 Turnos</h3><button class="btn btn-p" onclick="addTn()">➕</button></div><div class="card-b"><table><tr><th>Turno</th><th>Horário</th><th></th></tr>${r||'<tr><td colspan="3">Nenhum</td></tr>'}</table></div></div>`}
-function addTn(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Turno</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fr"><div class="fg"><select id="tnN"><option>Manhã</option><option>Tarde</option><option>Noite</option></select></div><div class="fg"><input id="tnH" placeholder="07:00-12:20"></div></div></div><div class="mf"><button class="btn btn-p" onclick="svTn()">Criar</button></div>`;oM()}
-async function svTn(){await db.collection('escolas').doc(CSI).collection('turnos').add({nome:$('tnN').value,horario:$('tnH').value.trim()});cM();pgTurnos()}
+function addTurno(){
+$('mB').className='modal';
+$('mB').innerHTML=`<div class="mh"><h3>➕ Novo Turno</h3><button class="mx" onclick="cM()">×</button></div>
+<div class="mb">
+<div class="fr">
+<div class="fg"><label>Nome do Turno <span class="req">*</span></label>
+<select id="tnNome"><option>Manhã</option><option>Tarde</option><option>Noite</option></select></div>
+<div class="fg"><label>Horário</label><input id="tnHorario" placeholder="Ex: 07:00 - 12:20"></div>
+</div>
+</div>
+<div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svTurno()">💾 Criar</button></div>`;
+oM()}
 
-async function pgDiscs(){const s=await db.collection('escolas').doc(CSI).collection('disciplinas').get();let r='';s.forEach(d=>{r+=`<tr><td>${d.data().nome}</td><td>${d.data().classe||'Todas'}</td><td><button class="btn btn-sm btn-s" onclick="delC('disciplinas','${d.id}',pgDiscs)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📚 Disciplinas</h3><button class="btn btn-p" onclick="addDc()">➕</button></div><div class="card-b"><table><tr><th>Disciplina</th><th>Classe</th><th></th></tr>${r||'<tr><td colspan="3">Nenhuma</td></tr>'}</table></div></div>`}
-async function addDc(){const cs=await db.collection('escolas').doc(CSI).collection('classes').get();$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Disciplina</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Nome</label><input id="dcN"></div><div class="fg"><select id="dcC"><option value="">Todas</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div></div><div class="mf"><button class="btn btn-p" onclick="svDc()">Criar</button></div>`;oM()}
-async function svDc(){await db.collection('escolas').doc(CSI).collection('disciplinas').add({nome:$('dcN').value.trim(),classe:$('dcC').value});cM();pgDiscs()}
+async function svTurno(){
+const nome=$('tnNome').value;
+const horario=$('tnHorario').value.trim();
+if(!nome){notify('Selecione o turno!','er');return}
+await db.collection('escolas').doc(CSI).collection('turnos').add({
+nome:nome,horario:horario,criadoEm:ts()});
+logAct('Criou turno: '+nome);
+notify('Turno criado!','ok');cM();pgTurnos()}
 
-// ===== UTILIZADORES =====
-async function pgUsers(){const s=await db.collection('escolas').doc(CSI).collection('usuarios').get();const sorted=[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const u=d.data();r+=`<tr><td>${u.foto?`<img src="${u.foto}" class="avsm">`:'👤'}</td><td><strong>${u.nome}</strong><br><small style="color:var(--txl)">${u.bi||''}</small></td><td><span class="badge b-p">${PN[u.perfil]||u.perfil}</span></td><td>${u.telefone||''}</td><td><span class="badge ${u.estado==='ativo'?'b-ok':'b-wn'}">${u.estado||'ativo'}</span></td><td><button class="btn btn-sm btn-inf" onclick="editU('${d.id}')">✏️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>👤 Utilizadores</h3><button class="btn btn-p" onclick="mUser()">➕</button></div><div class="card-b"><div class="tbl"><table><tr><th></th><th>Nome</th><th>Perfil</th><th>Tel</th><th>Est.</th><th></th></tr>${r||'<tr><td colspan="6">Nenhum</td></tr>'}</table></div></div></div>`}
+// TURMAS (usa turnos)
+async function pgTurmas(){const s=await db.collection('escolas').doc(CSI).collection('turmas').get();let r='';s.forEach(d=>{const t=d.data();r+=`<tr><td>${t.nome}</td><td>${t.classe}</td><td>${t.turno||''}</td><td><button class="btn btn-sm btn-s" onclick="delC('turmas','${d.id}',pgTurmas)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>👥 Turmas</h3><button class="btn btn-p" onclick="addTm()">➕</button></div><div class="card-b"><table><tr><th>Turma</th><th>Classe</th><th>Turno</th><th></th></tr>${r||'<tr><td colspan="4">—</td></tr>'}</table></div></div>`}
+async function addTm(){const[cs,tn]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('turnos').get()]);$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Turma</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fr"><div class="fg"><label>Nome</label><input id="tmN" placeholder="Ex: A, B, C"></div><div class="fg"><label>Classe</label><select id="tmC">${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div></div><div class="fg"><label>Turno</label><select id="tmTn"><option value="">— Sem turno —</option>${tn.docs.map(d=>`<option>${d.data().nome} (${d.data().horario||''})</option>`).join('')}</select></div></div><div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svTm()">Criar</button></div>`;oM()}
+async function svTm(){const nome=$('tmN').value.trim();if(!nome){notify('Nome da turma!','er');return}await db.collection('escolas').doc(CSI).collection('turmas').add({nome:nome,classe:$('tmC').value,turno:$('tmTn').value});logAct('Criou turma: '+nome);notify('Turma criada!','ok');cM();pgTurmas()}
 
-function mUser(uid){$('mB').className='modal lg';$('mB').innerHTML=`<div class="mh"><h3>${uid?'✏️':'➕'} Funcionário</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="phup"><div class="phpv" onclick="$('uF').click()"><span class="pht" id="uFT">📷</span><img id="uFI" style="display:none"><div class="phb">📷</div></div><input type="file" id="uF" accept="image/*" style="display:none" onchange="prevF('uF','uFI','uFT')"></div>
-<div class="st">👤 Pessoais</div>
-<div class="fr"><div class="fg"><label>Nome <span class="req">*</span></label><input id="uNm"></div><div class="fg"><label>Nascimento</label><input type="date" id="uNs"></div></div>
-<div class="fr3"><div class="fg"><label>Género</label><select id="uGn"><option value="M">M</option><option value="F">F</option></select></div><div class="fg"><label>BI <span class="req">*</span></label><input id="uBI"></div><div class="fg"><label>Est. Civil</label><select id="uEC"><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option></select></div></div>
-<div class="fr"><div class="fg"><label>Pai</label><input id="uPai"></div><div class="fg"><label>Mãe</label><input id="uMae"></div></div>
-<div class="fr"><div class="fg"><label>Naturalidade</label><input id="uNat"></div><div class="fg"><label>Residência</label><input id="uRes"></div></div>
-<div class="st">🎓 Profissionais</div>
-<div class="fr"><div class="fg"><label>Perfil <span class="req">*</span></label><select id="uPf"><option value="subdirPed">Sub.Ped</option><option value="subdirAdm">Sub.Adm</option><option value="secretaria">Secretário(a)</option><option value="professor">Professor(a)</option></select></div><div class="fg"><label>Habilitações</label><input id="uHb"></div></div>
-<div class="fr3"><div class="fg"><label>Categoria</label><input id="uCat"></div><div class="fg"><label>Nº Agente</label><input id="uAg"></div><div class="fg"><label>INSS</label><input id="uINSS"></div></div>
-<div class="fr"><div class="fg"><label>Disciplinas</label><input id="uDisc"></div><div class="fg"><label>NIF</label><input id="uNIF"></div></div>
-<div class="st">📞 Contactos</div>
-<div class="fr"><div class="fg"><label>Tel <span class="req">*</span></label><input id="uTl"></div><div class="fg"><label>Email</label><input id="uEm"></div></div>
-<div class="st">🔑 Credenciais</div>
-<div class="fr"><div class="fg"><label>User <span class="req">*</span></label><input id="uUs"></div><div class="fg"><label>Senha${uid?' (vazio=manter)':' *'}</label><input type="password" id="uPw"></div></div>
-</div><div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svU('${uid||''}')">💾</button></div>`;oM();if(uid)ldU(uid)}
+// DISCIPLINAS
+async function pgDiscs(){const s=await db.collection('escolas').doc(CSI).collection('disciplinas').get();let r='';s.forEach(d=>{r+=`<tr><td>${d.data().nome}</td><td>${d.data().classe||'Todas'}</td><td><button class="btn btn-sm btn-s" onclick="delC('disciplinas','${d.id}',pgDiscs)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📚 Disciplinas</h3><button class="btn btn-p" onclick="addDc()">➕</button></div><div class="card-b"><table><tr><th>Disciplina</th><th>Classe</th><th></th></tr>${r||'<tr><td colspan="3">—</td></tr>'}</table></div></div>`}
+async function addDc(){const cs=await db.collection('escolas').doc(CSI).collection('classes').get();$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Disciplina</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Nome da Disciplina <span class="req">*</span></label><input id="dcN" placeholder="Ex: Língua Portuguesa"></div><div class="fg"><label>Classe (vazio = todas)</label><select id="dcC"><option value="">Todas as Classes</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div></div><div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svDc()">Criar</button></div>`;oM()}
+async function svDc(){const nome=$('dcN').value.trim();if(!nome){notify('Nome!','er');return}await db.collection('escolas').doc(CSI).collection('disciplinas').add({nome:nome,classe:$('dcC').value});logAct('Disciplina: '+nome);notify('Disciplina criada!','ok');cM();pgDiscs()}
 
-async function ldU(id){const d=await db.collection('escolas').doc(CSI).collection('usuarios').doc(id).get();if(!d.exists)return;const u=d.data();$('uNm').value=u.nome||'';$('uNs').value=u.nascimento||'';$('uGn').value=u.genero||'M';$('uEC').value=u.estadoCivil||'';$('uBI').value=u.bi||'';$('uPai').value=u.nomePai||'';$('uMae').value=u.nomeMae||'';$('uNat').value=u.naturalidade||'';$('uRes').value=u.residencia||'';$('uPf').value=u.perfil||'';$('uHb').value=u.habilitacoes||'';$('uCat').value=u.categoria||'';$('uAg').value=u.agente||'';$('uINSS').value=u.inss||'';$('uNIF').value=u.nif||'';$('uDisc').value=u.disciplinas||'';$('uTl').value=u.telefone||'';$('uEm').value=u.email||'';$('uUs').value=u.username||'';if(u.foto){$('uFI').src=u.foto;$('uFI').style.display='block';$('uFT').style.display='none'}}
+// ===== ATRIBUIÇÕES =====
+async function pgAtrib(){
+const[profs,discs,cs,turmas]=await Promise.all([
+db.collection('escolas').doc(CSI).collection('usuarios').where('perfil','==','professor').get(),
+db.collection('escolas').doc(CSI).collection('disciplinas').get(),
+db.collection('escolas').doc(CSI).collection('classes').get(),
+db.collection('escolas').doc(CSI).collection('turmas').get()]);
+const atribs=await db.collection('escolas').doc(CSI).collection('atribuicoes').get();
+let r='';atribs.forEach(d=>{const a=d.data();r+=`<tr><td>${a.professorNome}</td><td>${a.disciplina}</td><td>${a.classe}</td><td>${a.turma||'Todas'}</td><td><button class="btn btn-sm btn-s" onclick="delC('atribuicoes','${d.id}',pgAtrib)">🗑️</button></td></tr>`});
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>🔗 Atribuições</h3><button class="btn btn-p" onclick="addAtrib()">➕ Atribuir</button></div><div class="card-b">
+<p style="font-size:.7em;color:var(--txl);margin-bottom:5px">Atribua disciplinas, classes e turmas a cada professor. Professores só lançam notas nas atribuições.</p>
+<div class="tbl"><table><tr><th>Professor</th><th>Disciplina</th><th>Classe</th><th>Turma</th><th></th></tr>${r||'<tr><td colspan="5">Nenhuma</td></tr>'}</table></div></div></div>`}
 
-async function svU(uid){const nm=$('uNm').value.trim();if(!nm){notify('Nome!','er');return}if(!uid&&(!$('uUs').value.trim()||!$('uPw').value)){notify('User/Senha!','er');return}let foto=null;if($('uF').files[0])foto=await imgB64($('uF'));const d={nome:nm,nascimento:$('uNs').value,genero:$('uGn').value,estadoCivil:$('uEC').value,bi:$('uBI').value.trim(),nomePai:$('uPai').value.trim(),nomeMae:$('uMae').value.trim(),naturalidade:$('uNat').value.trim(),residencia:$('uRes').value.trim(),perfil:$('uPf').value,habilitacoes:$('uHb').value.trim(),categoria:$('uCat').value.trim(),agente:$('uAg').value.trim(),inss:$('uINSS').value.trim(),nif:$('uNIF').value.trim(),disciplinas:$('uDisc').value.trim(),telefone:$('uTl').value.trim(),email:$('uEm').value.trim(),estado:'ativo'};if($('uUs').value.trim())d.username=$('uUs').value.trim();if($('uPw').value)d.password=$('uPw').value;if(foto)d.foto=foto;if(uid)await db.collection('escolas').doc(CSI).collection('usuarios').doc(uid).update(d);else{d.criadoEm=ts();await db.collection('escolas').doc(CSI).collection('usuarios').add(d)}logAct((uid?'Editou':'Criou')+' func: '+nm);notify('OK','ok');cM();pgUsers()}
+async function addAtrib(){
+const[profs,discs,cs,turmas]=await Promise.all([
+db.collection('escolas').doc(CSI).collection('usuarios').where('perfil','==','professor').get(),
+db.collection('escolas').doc(CSI).collection('disciplinas').get(),
+db.collection('escolas').doc(CSI).collection('classes').get(),
+db.collection('escolas').doc(CSI).collection('turmas').get()]);
+$('mB').className='modal lg';$('mB').innerHTML=`<div class="mh"><h3>🔗 Nova Atribuição</h3><button class="mx" onclick="cM()">×</button></div><div class="mb">
+<div class="fg"><label>Professor <span class="req">*</span></label><select id="atProf">${profs.docs.sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||'')).map(d=>`<option value="${d.id}" data-nome="${d.data().nome}">${d.data().nome}</option>`).join('')}</select></div>
+<div class="fg"><label>Disciplina <span class="req">*</span></label><select id="atDisc">${discs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div>
+<div class="fr"><div class="fg"><label>Classe <span class="req">*</span></label><select id="atCl">${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div>
+<div class="fg"><label>Turma (vazio=todas)</label><select id="atTm"><option value="">Todas</option>${turmas.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div></div>
+</div><div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svAtrib()">💾 Atribuir</button></div>`;oM()}
+
+async function svAtrib(){
+const profId=$('atProf').value;const profNome=$('atProf').selectedOptions[0]?.dataset?.nome||'';
+const disc=$('atDisc').value;const cl=$('atCl').value;const tm=$('atTm').value;
+if(!profId||!disc||!cl){notify('Preencha!','er');return}
+const existing=await db.collection('escolas').doc(CSI).collection('atribuicoes')
+.where('professorId','==',profId).where('disciplina','==',disc).where('classe','==',cl).get();
+if(!existing.empty){notify('Já atribuído!','wn');return}
+await db.collection('escolas').doc(CSI).collection('atribuicoes').add({
+professorId:profId,professorNome:profNome,disciplina:disc,classe:cl,turma:tm,criadoEm:ts()});
+logAct('Atribuiu '+disc+' a '+profNome);notify('Atribuído!','ok');cM();pgAtrib()}
+
+async function profPodeNotas(profId,disc,cl){
+if(CU.perfil==='director'||CU.perfil==='subdirPed')return true;
+const atribs=await db.collection('escolas').doc(CSI).collection('atribuicoes')
+.where('professorId','==',profId).where('disciplina','==',disc).where('classe','==',cl).get();
+return!atribs.empty}
+
+// ===== UTILIZADORES COM DADOS COMPLETOS (Ministério da Educação Angola) =====
+async function pgUsers(){const s=await db.collection('escolas').doc(CSI).collection('usuarios').get();const sorted=[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const u=d.data();r+=`<tr><td>${u.foto?`<img src="${u.foto}" class="avsm">`:'👤'}</td><td><strong>${u.nome}</strong><br><small style="color:var(--txl)">${u.bi||''} · ${calcIdade(u.nascimento)||'?'}a</small></td><td><span class="badge b-p">${PN[u.perfil]||u.perfil}</span></td><td>${u.genero==='M'?'♂':'♀'}</td><td>${u.telefone||''}</td><td><span class="badge ${u.estado==='ativo'?'b-ok':'b-wn'}">${u.estado||'ativo'}</span></td><td><button class="btn btn-sm btn-inf" onclick="editU('${d.id}')">✏️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>👤 Utilizadores</h3><button class="btn btn-p" onclick="mUser()">➕</button></div><div class="card-b"><div class="tbl"><table><tr><th></th><th>Nome/BI/Idade</th><th>Perfil</th><th>G</th><th>Tel</th><th>Est.</th><th></th></tr>${r||'<tr><td colspan="7">—</td></tr>'}</table></div></div></div>`}
+
+function mUser(uid){$('mB').className='modal xl';$('mB').innerHTML=`<div class="mh"><h3>${uid?'✏️':'➕'} Funcionário — Dados Completos</h3><button class="mx" onclick="cM()">×</button></div><div class="mb">
+<div class="phup"><div class="phpv" onclick="$('uF').click()"><span class="pht" id="uFT">📷 Foto Tipo Passe</span><img id="uFI" style="display:none"><div class="phb">📷</div></div><input type="file" id="uF" accept="image/*" style="display:none" onchange="prevF('uF','uFI','uFT')"><small style="color:var(--txl);font-size:.68em">Até 5,5 MB</small></div>
+
+<div class="st">👤 Dados Pessoais</div>
+<div class="fr"><div class="fg"><label>Nome Completo <span class="req">*</span></label><input id="uNm"></div><div class="fg"><label>Data de Nascimento <span class="req">*</span></label><input type="date" id="uNs"></div></div>
+<div class="fr3"><div class="fg"><label>Género <span class="req">*</span></label><select id="uGn"><option value="M">Masculino</option><option value="F">Feminino</option></select></div><div class="fg"><label>Estado Civil</label><select id="uEC"><option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União de Facto</option></select></div><div class="fg"><label>Nacionalidade</label><input id="uNac" value="Angolana"></div></div>
+<div class="fr"><div class="fg"><label>Nome do Pai</label><input id="uPai"></div><div class="fg"><label>Nome da Mãe</label><input id="uMae"></div></div>
+<div class="fr3"><div class="fg"><label>Naturalidade (Município)</label><input id="uNat"></div><div class="fg"><label>Província de Origem</label><select id="uProvOrig">${provO()}</select></div><div class="fg"><label>Grupo Sanguíneo</label><select id="uSangue"><option value="">—</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div></div>
+
+<div class="st">🆔 Documentos de Identificação</div>
+<div class="fr3"><div class="fg"><label>Nº do BI <span class="req">*</span></label><input id="uBI"></div><div class="fg"><label>Arquivo de Identificação</label><input id="uArqId" placeholder="Ex: Luanda"></div><div class="fg"><label>Data Emissão BI</label><input type="date" id="uBIEm"></div></div>
+<div class="fr3"><div class="fg"><label>Data Validade BI</label><input type="date" id="uBIVal"></div><div class="fg"><label>NIF</label><input id="uNIF"></div><div class="fg"><label>INSS</label><input id="uINSS"></div></div>
+
+<div class="st">🎓 Dados Académicos</div>
+<div class="fr"><div class="fg"><label>Habilitações Literárias</label><select id="uHb"><option>Ensino Médio</option><option>Bacharelato</option><option>Licenciatura</option><option>Mestrado</option><option>Doutoramento</option><option>Outro</option></select></div><div class="fg"><label>Curso/Área de Formação</label><input id="uCurso" placeholder="Ex: Ensino de Matemática"></div></div>
+<div class="fr"><div class="fg"><label>Instituição de Formação</label><input id="uInst" placeholder="Ex: ISCED-Luanda"></div><div class="fg"><label>Ano de Conclusão</label><input type="number" id="uAnoConcl"></div></div>
+
+<div class="st">💼 Dados Profissionais</div>
+<div class="fr"><div class="fg"><label>Perfil/Função <span class="req">*</span></label><select id="uPf"><option value="subdirPed">Subdiretor Pedagógico</option><option value="subdirAdm">Subdiretor Administrativo</option><option value="secretaria">Secretário(a)</option><option value="professor">Professor(a)</option></select></div><div class="fg"><label>Categoria Profissional</label><input id="uCat" placeholder="Ex: Técnico Superior"></div></div>
+<div class="fr3"><div class="fg"><label>Nº de Agente</label><input id="uAg"></div><div class="fg"><label>Nº Mecanográfico</label><input id="uMecan"></div><div class="fg"><label>Escalão</label><input id="uEscalao"></div></div>
+<div class="fr"><div class="fg"><label>Data Admissão na Educação</label><input type="date" id="uAdmissao"></div><div class="fg"><label>Data Ingresso nesta Escola</label><input type="date" id="uIngresso"></div></div>
+<div class="fr3"><div class="fg"><label>Disciplinas que Leciona</label><input id="uDisc" placeholder="Ex: Física, Química"></div><div class="fg"><label>Regime</label><select id="uRegime"><option>Efectivo</option><option>Contratado</option><option>Colaborador</option><option>Estagiário</option></select></div><div class="fg"><label>IRT</label><input id="uIRT"></div></div>
+
+<div class="st">📞 Contactos e Morada</div>
+<div class="fr"><div class="fg"><label>Telefone Principal <span class="req">*</span></label><input id="uTl"></div><div class="fg"><label>Telefone Alternativo</label><input id="uTl2"></div></div>
+<div class="fr"><div class="fg"><label>Email</label><input id="uEm"></div><div class="fg"><label>Endereço/Residência</label><input id="uEnd"></div></div>
+
+<div class="st">🔑 Credenciais de Acesso</div>
+<div class="fr"><div class="fg"><label>Utilizador <span class="req">*</span></label><input id="uUs"></div><div class="fg"><label>Senha${uid?' (vazio=manter)':' *'}</label><input type="password" id="uPw"></div></div>
+</div><div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svU('${uid||''}')">💾 Salvar</button></div>`;oM();if(uid)ldU(uid)}
+
+async function ldU(id){const d=await db.collection('escolas').doc(CSI).collection('usuarios').doc(id).get();if(!d.exists)return;const u=d.data();
+$('uNm').value=u.nome||'';$('uNs').value=u.nascimento||'';$('uGn').value=u.genero||'M';$('uEC').value=u.estadoCivil||'';$('uNac').value=u.nacionalidade||'Angolana';$('uPai').value=u.nomePai||'';$('uMae').value=u.nomeMae||'';$('uNat').value=u.naturalidade||'';$('uProvOrig').value=u.provOrigem||'';$('uSangue').value=u.grupoSangue||'';
+$('uBI').value=u.bi||'';$('uArqId').value=u.arquivo||'';$('uBIEm').value=u.biEmissao||'';$('uBIVal').value=u.biValidade||'';$('uNIF').value=u.nif||'';$('uINSS').value=u.inss||'';
+$('uHb').value=u.habilitacoes||'';$('uCurso').value=u.curso||'';$('uInst').value=u.instituicao||'';$('uAnoConcl').value=u.anoConclusao||'';
+$('uPf').value=u.perfil||'';$('uCat').value=u.categoria||'';$('uAg').value=u.agente||'';$('uMecan').value=u.mecanografico||'';$('uEscalao').value=u.escalao||'';$('uAdmissao').value=u.dataAdmissao||'';$('uIngresso').value=u.dataIngresso||'';$('uDisc').value=u.disciplinas||'';$('uRegime').value=u.regime||'';$('uIRT').value=u.irt||'';
+$('uTl').value=u.telefone||'';$('uTl2').value=u.telefone2||'';$('uEm').value=u.email||'';$('uEnd').value=u.endereco||'';$('uUs').value=u.username||'';
+if(u.foto){$('uFI').src=u.foto;$('uFI').style.display='block';$('uFT').style.display='none'}}
+
+async function svU(uid){const nm=$('uNm').value.trim();if(!nm){notify('Nome!','er');return}if(!uid&&(!$('uUs').value.trim()||!$('uPw').value)){notify('User/Senha!','er');return}
+let foto=null;if($('uF').files[0])foto=await imgB64($('uF'));
+const d={nome:nm,nascimento:$('uNs').value,genero:$('uGn').value,estadoCivil:$('uEC').value,nacionalidade:$('uNac').value.trim(),nomePai:$('uPai').value.trim(),nomeMae:$('uMae').value.trim(),naturalidade:$('uNat').value.trim(),provOrigem:$('uProvOrig').value,grupoSangue:$('uSangue').value,
+bi:$('uBI').value.trim(),arquivo:$('uArqId').value.trim(),biEmissao:$('uBIEm').value,biValidade:$('uBIVal').value,nif:$('uNIF').value.trim(),inss:$('uINSS').value.trim(),
+habilitacoes:$('uHb').value,curso:$('uCurso').value.trim(),instituicao:$('uInst').value.trim(),anoConclusao:$('uAnoConcl').value,
+perfil:$('uPf').value,categoria:$('uCat').value.trim(),agente:$('uAg').value.trim(),mecanografico:$('uMecan').value.trim(),escalao:$('uEscalao').value.trim(),dataAdmissao:$('uAdmissao').value,dataIngresso:$('uIngresso').value,disciplinas:$('uDisc').value.trim(),regime:$('uRegime').value,irt:$('uIRT').value.trim(),
+telefone:$('uTl').value.trim(),telefone2:$('uTl2').value.trim(),email:$('uEm').value.trim(),endereco:$('uEnd').value.trim(),estado:'ativo'};
+if($('uUs').value.trim())d.username=$('uUs').value.trim();if($('uPw').value)d.password=$('uPw').value;if(foto)d.foto=foto;
+if(uid)await db.collection('escolas').doc(CSI).collection('usuarios').doc(uid).update(d);
+else{d.criadoEm=ts();await db.collection('escolas').doc(CSI).collection('usuarios').add(d)}
+logAct((uid?'Editou':'Cadastrou')+' func: '+nm);notify('Salvo!','ok');cM();pgUsers()}
 function editU(id){mUser(id)}
 
-// ===== ALUNOS =====
-async function pgAlunos(){const als=await db.collection('escolas').doc(CSI).collection('alunos').get();const cs=await db.collection('escolas').doc(CSI).collection('classes').get();const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const a=d.data();r+=`<tr data-cl="${a.classe||''}" data-nm="${(a.nome||'').toLowerCase()}"><td>${a.foto?`<img src="${a.foto}" class="avsm">`:'👤'}</td><td><strong>${a.nome}</strong></td><td>${a.classe||''}</td><td>${a.turma||''}</td><td><span class="badge ${a.estado==='ativo'?'b-ok':a.estado==='transferido'?'b-wn':'b-dg'}">${a.estado||'ativo'}</span></td><td><button class="btn btn-sm btn-inf" onclick="editAl('${d.id}')">✏️</button> <button class="btn btn-sm btn-ok" onclick="fichaAlPDF('${d.id}')">📄</button> <button class="btn btn-sm btn-wn" onclick="tEA('${d.id}')">🔄</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>👨‍🎓 Alunos (${als.size})</h3><div class="btn-group"><button class="btn btn-sm btn-ok" onclick="exAlXL()">📊</button><button class="btn btn-p" onclick="mAluno()">➕</button></div></div><div class="card-b"><div class="fp"><select id="fCl" onchange="fAl()"><option value="">Todas</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><input type="text" placeholder="🔍 Nome..." onkeyup="fAlN(this.value)" style="flex:1;max-width:180px"></div><div class="tbl"><table id="tAl"><tr><th></th><th>Nome</th><th>Classe</th><th>Turma</th><th>Estado</th><th></th></tr>${r||'<tr><td colspan="6">Nenhum</td></tr>'}</table></div></div></div>`}
+// ===== ALUNOS COM DADOS COMPLETOS (Ministério Educação Angola) =====
+async function pgAlunos(){const als=await db.collection('escolas').doc(CSI).collection('alunos').get();const cs=await db.collection('escolas').doc(CSI).collection('classes').get();const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const a=d.data();r+=`<tr data-cl="${a.classe||''}" data-nm="${(a.nome||'').toLowerCase()}"><td>${a.foto?`<img src="${a.foto}" class="avsm">`:'👤'}</td><td><strong>${a.nome}</strong><br><small style="color:var(--txl)">${a.matricula||''} · ${calcIdade(a.nascimento)||'?'}a</small></td><td>${a.classe||''}</td><td>${a.turma||''}</td><td><span class="badge ${a.estado==='ativo'?'b-ok':a.estado==='transferido'?'b-wn':'b-dg'}">${a.estado||'ativo'}</span></td><td><button class="btn btn-sm btn-inf" onclick="editAl('${d.id}')">✏️</button> <button class="btn btn-sm btn-wn" onclick="tEA('${d.id}')">🔄</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>👨‍🎓 Alunos (${als.size})</h3><div class="btn-group"><button class="btn btn-sm btn-ok" onclick="exAlXL()">📊</button><button class="btn btn-p" onclick="mAluno()">➕ Matricular</button></div></div><div class="card-b"><div class="fp"><select id="fCl" onchange="fAl()"><option value="">Todas</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><input type="text" placeholder="🔍 Nome..." onkeyup="fAlN(this.value)" style="flex:1;max-width:160px"></div><div class="tbl"><table id="tAl"><tr><th></th><th>Nome/Mat/Idade</th><th>Classe</th><th>Turma</th><th>Est.</th><th></th></tr>${r||'<tr><td colspan="6">—</td></tr>'}</table></div></div></div>`}
 function fAl(){const v=$('fCl').value;document.querySelectorAll('#tAl tr[data-cl]').forEach(tr=>{tr.style.display=(!v||tr.dataset.cl===v)?'':'none'})}
 function fAlN(t){t=t.toLowerCase();document.querySelectorAll('#tAl tr[data-nm]').forEach(tr=>{tr.style.display=tr.dataset.nm.includes(t)?'':'none'})}
 
-async function mAluno(aid){const[cs,ts2]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('turmas').get()]);$('mB').className='modal xl';$('mB').innerHTML=`<div class="mh"><h3>${aid?'✏️':'➕'} Aluno</h3><button class="mx" onclick="cM()">×</button></div><div class="mb">
-<div class="phup"><div class="phpv" onclick="$('aFo').click()"><span class="pht" id="aFoT">📷</span><img id="aFoI" style="display:none"><div class="phb">📷</div></div><input type="file" id="aFo" accept="image/*" style="display:none" onchange="prevF('aFo','aFoI','aFoT')"></div>
-<div class="st">📋 Matrícula</div>
-<div class="fr3"><div class="fg"><label>Matrícula</label><input id="aMt" value="${aid?'':genMat()}" readonly style="background:#f0f0f0"></div><div class="fg"><label>Processo</label><input id="aPr"></div><div class="fg"><label>Nº</label><input id="aNum"></div></div>
-<div class="fr"><div class="fg"><label>Classe <span class="req">*</span></label><select id="aCl">${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div><div class="fg"><label>Turma</label><select id="aTm">${ts2.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div></div>
-<div class="st">👤 Pessoais</div>
-<div class="fr"><div class="fg"><label>Nome <span class="req">*</span></label><input id="aNm"></div><div class="fg"><label>Nascimento</label><input type="date" id="aNs"></div></div>
-<div class="fr3"><div class="fg"><label>Género</label><select id="aGn"><option value="M">M</option><option value="F">F</option></select></div><div class="fg"><label>Naturalidade</label><input id="aNat"></div><div class="fg"><label>Município</label><input id="aMun"></div></div>
-<div class="fr3"><div class="fg"><label>Província</label><select id="aProv">${provO()}</select></div><div class="fg"><label>Residência</label><input id="aRes"></div><div class="fg"><label>Nacionalidade</label><input id="aNac" value="Angolana"></div></div>
-<div class="fr3"><div class="fg"><label>BI</label><input id="aBI"></div><div class="fg"><label>Cédula</label><input id="aCed"></div><div class="fg"><label>Arquivo Ident.</label><input id="aArq"></div></div>
+async function mAluno(aid){const[cs,ts2]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('turmas').get()]);
+$('mB').className='modal xl';$('mB').innerHTML=`<div class="mh"><h3>${aid?'✏️':'➕'} Aluno — Dados Completos</h3><button class="mx" onclick="cM()">×</button></div><div class="mb">
+<div class="phup"><div class="phpv" onclick="$('aFo').click()"><span class="pht" id="aFoT">📷 Foto 3x4</span><img id="aFoI" style="display:none"><div class="phb">📷</div></div><input type="file" id="aFo" accept="image/*" style="display:none" onchange="prevF('aFo','aFoI','aFoT')"><small style="color:var(--txl);font-size:.68em">Até 5,5 MB</small></div>
+
+<div class="st">📋 Dados de Matrícula</div>
+<div class="fr3"><div class="fg"><label>Nº de Matrícula</label><input id="aMt" value="${aid?'':genMat()}" readonly style="background:#f0f0f0"></div><div class="fg"><label>Nº do Processo Individual</label><input id="aPr"></div><div class="fg"><label>Nº do Aluno na Turma</label><input id="aNum"></div></div>
+<div class="fr3"><div class="fg"><label>Classe <span class="req">*</span></label><select id="aCl">${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div><div class="fg"><label>Turma</label><select id="aTm">${ts2.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select></div><div class="fg"><label>Ano Letivo</label><input id="aAnL" readonly style="background:#f0f0f0"></div></div>
+
+<div class="st">👤 Dados Pessoais do Aluno</div>
+<div class="fr"><div class="fg"><label>Nome Completo <span class="req">*</span></label><input id="aNm"></div><div class="fg"><label>Data de Nascimento <span class="req">*</span></label><input type="date" id="aNs"></div></div>
+<div class="fr3"><div class="fg"><label>Género <span class="req">*</span></label><select id="aGn"><option value="M">Masculino</option><option value="F">Feminino</option></select></div><div class="fg"><label>Nacionalidade</label><input id="aNac" value="Angolana"></div><div class="fg"><label>Grupo Sanguíneo</label><select id="aSangue"><option value="">—</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div></div>
+<div class="fr3"><div class="fg"><label>Naturalidade (Município)</label><input id="aNat"></div><div class="fg"><label>Município</label><input id="aMun"></div><div class="fg"><label>Província de Origem</label><select id="aProv">${provO()}</select></div></div>
+<div class="fg"><label>Residência / Bairro</label><input id="aRes"></div>
+
+<div class="st">🆔 Documentos</div>
+<div class="fr3"><div class="fg"><label>Nº do BI</label><input id="aBI"></div><div class="fg"><label>Cédula (se menor)</label><input id="aCed"></div><div class="fg"><label>Arquivo de Identificação</label><input id="aArq" placeholder="Ex: Luanda"></div></div>
+<div class="fr"><div class="fg"><label>Data de Emissão do BI</label><input type="date" id="aBIData"></div><div class="fg"><label>Assento de Nascimento Nº</label><input id="aAssento"></div></div>
+
 <div class="st">👨‍👩‍👧 Filiação</div>
-<div class="fr"><div class="fg"><label>Pai</label><input id="aPai"></div><div class="fg"><label>Prof. Pai</label><input id="aPaiP"></div></div>
-<div class="fr"><div class="fg"><label>Mãe</label><input id="aMae"></div><div class="fg"><label>Prof. Mãe</label><input id="aMaeP"></div></div>
-<div class="st">📞 Encarregado</div>
-<div class="fr"><div class="fg"><label>Nome</label><input id="aEN"></div><div class="fg"><label>Tel</label><input id="aET"></div></div>
-<div class="fr"><div class="fg"><label>BI Enc.</label><input id="aEBI"></div><div class="fg"><label>Parentesco</label><input id="aEPar"></div></div>
-</div><div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svAl('${aid||''}')">💾</button></div>`;oM();if(aid)ldAl(aid)}
+<div class="fr"><div class="fg"><label>Nome Completo do Pai</label><input id="aPai"></div><div class="fg"><label>Profissão do Pai</label><input id="aPaiP"></div></div>
+<div class="fr"><div class="fg"><label>Nome Completo da Mãe</label><input id="aMae"></div><div class="fg"><label>Profissão da Mãe</label><input id="aMaeP"></div></div>
 
-async function ldAl(id){const d=await db.collection('escolas').doc(CSI).collection('alunos').doc(id).get();if(!d.exists)return;const a=d.data();$('aMt').value=a.matricula||'';$('aPr').value=a.processo||'';$('aNum').value=a.numero||'';$('aCl').value=a.classe||'';$('aTm').value=a.turma||'';$('aNm').value=a.nome||'';$('aNs').value=a.nascimento||'';$('aGn').value=a.genero||'M';$('aNac').value=a.nacionalidade||'';$('aNat').value=a.naturalidade||'';$('aMun').value=a.municipio||'';$('aProv').value=a.provincia||'';$('aRes').value=a.residencia||'';$('aBI').value=a.bi||'';$('aCed').value=a.cedula||'';$('aArq').value=a.arquivo||'';$('aPai').value=a.nomePai||'';$('aPaiP').value=a.paiProfissao||'';$('aMae').value=a.nomeMae||'';$('aMaeP').value=a.maeProfissao||'';$('aEN').value=a.encNome||'';$('aET').value=a.encTelefone||'';$('aEBI').value=a.encBI||'';$('aEPar').value=a.encParentesco||'';if(a.foto){$('aFoI').src=a.foto;$('aFoI').style.display='block';$('aFoT').style.display='none'}}
+<div class="st">📞 Encarregado de Educação</div>
+<div class="fr"><div class="fg"><label>Nome do Encarregado <span class="req">*</span></label><input id="aEN"></div><div class="fg"><label>Parentesco</label><input id="aEPar" placeholder="Pai, Mãe, Tio..."></div></div>
+<div class="fr3"><div class="fg"><label>BI do Encarregado</label><input id="aEBI"></div><div class="fg"><label>Telefone Principal <span class="req">*</span></label><input id="aET"></div><div class="fg"><label>Telefone Alternativo</label><input id="aET2"></div></div>
+<div class="fr"><div class="fg"><label>Profissão do Encarregado</label><input id="aEProf"></div><div class="fg"><label>Endereço do Encarregado</label><input id="aEEnd"></div></div>
 
-async function svAl(aid){const nm=$('aNm').value.trim();if(!nm){notify('Nome!','er');return}let foto=null;if($('aFo').files[0])foto=await imgB64($('aFo'));const d={nome:nm,matricula:$('aMt').value.trim(),processo:$('aPr').value.trim(),numero:$('aNum').value.trim(),classe:$('aCl').value,turma:$('aTm').value,nascimento:$('aNs').value,genero:$('aGn').value,nacionalidade:$('aNac').value.trim(),naturalidade:$('aNat').value.trim(),municipio:$('aMun').value.trim(),provincia:$('aProv').value,residencia:$('aRes').value.trim(),bi:$('aBI').value.trim(),cedula:$('aCed').value.trim(),arquivo:$('aArq').value.trim(),nomePai:$('aPai').value.trim(),paiProfissao:$('aPaiP').value.trim(),nomeMae:$('aMae').value.trim(),maeProfissao:$('aMaeP').value.trim(),encNome:$('aEN').value.trim(),encTelefone:$('aET').value.trim(),encBI:$('aEBI').value.trim(),encParentesco:$('aEPar').value.trim(),estado:'ativo'};if(foto)d.foto=foto;if(aid)await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).update(d);else{d.criadoEm=ts();await db.collection('escolas').doc(CSI).collection('alunos').add(d)}logAct((aid?'Editou':'Matriculou')+': '+nm);notify('OK','ok');cM();pgAlunos()}
+<div class="st">🏥 Dados de Saúde</div>
+<div class="fr"><div class="fg"><label>Necessidades Especiais</label><select id="aNecEsp"><option value="Não">Não</option><option value="Sim">Sim</option></select></div><div class="fg"><label>Se sim, especifique</label><input id="aNecDesc"></div></div>
+<div class="fg"><label>Alergias ou Condições Médicas</label><input id="aAlergias" placeholder="Ex: Alergia a penicilina"></div>
+
+</div><div class="mf"><button class="btn btn-out" onclick="cM()">Cancelar</button><button class="btn btn-p" onclick="svAl('${aid||''}')">💾 Salvar</button></div>`;oM();if(aid)ldAl(aid);
+const anoA=await db.collection('escolas').doc(CSI).collection('anosLetivos').where('estado','==','aberto').get();if(!anoA.empty&&$('aAnL'))$('aAnL').value=anoA.docs[0].data().nome}
+
+async function ldAl(id){const d=await db.collection('escolas').doc(CSI).collection('alunos').doc(id).get();if(!d.exists)return;const a=d.data();
+$('aMt').value=a.matricula||'';$('aPr').value=a.processo||'';$('aNum').value=a.numero||'';$('aCl').value=a.classe||'';$('aTm').value=a.turma||'';
+$('aNm').value=a.nome||'';$('aNs').value=a.nascimento||'';$('aGn').value=a.genero||'M';$('aNac').value=a.nacionalidade||'';$('aSangue').value=a.grupoSangue||'';$('aNat').value=a.naturalidade||'';$('aMun').value=a.municipio||'';$('aProv').value=a.provincia||'';$('aRes').value=a.residencia||'';
+$('aBI').value=a.bi||'';$('aCed').value=a.cedula||'';$('aArq').value=a.arquivo||'';$('aBIData').value=a.biData||'';$('aAssento').value=a.assento||'';
+$('aPai').value=a.nomePai||'';$('aPaiP').value=a.paiProfissao||'';$('aMae').value=a.nomeMae||'';$('aMaeP').value=a.maeProfissao||'';
+$('aEN').value=a.encNome||'';$('aEPar').value=a.encParentesco||'';$('aEBI').value=a.encBI||'';$('aET').value=a.encTelefone||'';$('aET2').value=a.encTelefone2||'';$('aEProf').value=a.encProfissao||'';$('aEEnd').value=a.encEndereco||'';
+$('aNecEsp').value=a.necEspeciais||'Não';$('aNecDesc').value=a.necEspeciaisDesc||'';$('aAlergias').value=a.alergias||'';
+if(a.foto){$('aFoI').src=a.foto;$('aFoI').style.display='block';$('aFoT').style.display='none'}}
+
+async function svAl(aid){const nm=$('aNm').value.trim();if(!nm){notify('Nome!','er');return}
+let foto=null;if($('aFo').files[0])foto=await imgB64($('aFo'));
+const d={nome:nm,matricula:$('aMt').value.trim(),processo:$('aPr').value.trim(),numero:$('aNum').value.trim(),classe:$('aCl').value,turma:$('aTm').value,anoLetivo:$('aAnL')?.value||'',
+nascimento:$('aNs').value,genero:$('aGn').value,nacionalidade:$('aNac').value.trim(),grupoSangue:$('aSangue').value,naturalidade:$('aNat').value.trim(),municipio:$('aMun').value.trim(),provincia:$('aProv').value,residencia:$('aRes').value.trim(),
+bi:$('aBI').value.trim(),cedula:$('aCed').value.trim(),arquivo:$('aArq').value.trim(),biData:$('aBIData').value,assento:$('aAssento').value.trim(),
+nomePai:$('aPai').value.trim(),paiProfissao:$('aPaiP').value.trim(),nomeMae:$('aMae').value.trim(),maeProfissao:$('aMaeP').value.trim(),
+encNome:$('aEN').value.trim(),encParentesco:$('aEPar').value.trim(),encBI:$('aEBI').value.trim(),encTelefone:$('aET').value.trim(),encTelefone2:$('aET2').value.trim(),encProfissao:$('aEProf').value.trim(),encEndereco:$('aEEnd').value.trim(),
+necEspeciais:$('aNecEsp').value,necEspeciaisDesc:$('aNecDesc').value.trim(),alergias:$('aAlergias').value.trim(),estado:'ativo'};
+if(foto)d.foto=foto;
+if(aid)await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).update(d);
+else{d.criadoEm=ts();await db.collection('escolas').doc(CSI).collection('alunos').add(d)}
+logAct((aid?'Editou':'Matriculou')+': '+nm);notify('Salvo!','ok');cM();pgAlunos()}
+
 function editAl(id){mAluno(id)}
 async function tEA(id){const d=await db.collection('escolas').doc(CSI).collection('alunos').doc(id).get();const es=['ativo','transferido','desistente'];const at=d.data().estado||'ativo';await db.collection('escolas').doc(CSI).collection('alunos').doc(id).update({estado:es[(es.indexOf(at)+1)%es.length]});pgAlunos()}
-async function exAlXL(){const s=await db.collection('escolas').doc(CSI).collection('alunos').get();const d=[['Nº','Mat','Nome','Classe','Turma','Género','BI','Pai','Mãe','Enc.','Tel','Estado']];[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||'')).forEach(x=>{const a=x.data();d.push([a.numero,a.matricula,a.nome,a.classe,a.turma,a.genero,a.bi,a.nomePai,a.nomeMae,a.encNome,a.encTelefone,a.estado])});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d),'Alunos');XLSX.writeFile(wb,`Alunos_${CS.nome}.xlsx`);notify('XLSX!','ok')}
 
-// FICHA DO ALUNO PDF
-async function fichaAlPDF(aid){const d=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=d.data();const e=CS;const ns=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).get();const{jsPDF}=window.jspdf;const pdf=new jsPDF();pdf.setFontSize(13);pdf.text('FICHA DO ALUNO',105,14,{align:'center'});pdf.setFontSize(9);pdf.text(e.nome||'',105,20,{align:'center'});let y=28;const ln=(l,v)=>{pdf.setFont(undefined,'bold');pdf.text(l+':',12,y);pdf.setFont(undefined,'normal');pdf.text(String(v||'—'),55,y);y+=5;if(y>278){pdf.addPage();y=15}};ln('Nome',a.nome);ln('Matrícula',a.matricula);ln('Classe',a.classe);ln('Turma',a.turma);ln('Nº',a.numero);ln('Nascimento',a.nascimento);ln('Género',a.genero==='M'?'M':'F');ln('Nacionalidade',a.nacionalidade);ln('Naturalidade',a.naturalidade);ln('BI',a.bi);ln('Pai',a.nomePai);ln('Mãe',a.nomeMae);ln('Enc.',a.encNome);ln('Tel Enc.',a.encTelefone);y+=3;
-if(!ns.empty){pdf.setFont(undefined,'bold');pdf.text('NOTAS',12,y);y+=5;const bd={};ns.forEach(x=>{const n=x.data();if(!bd[n.disciplina])bd[n.disciplina]={};bd[n.disciplina][n.trimestre]=n});const body=Object.entries(bd).sort().map(([d2,t])=>{const t1=t['1º Trimestre']||{},t2=t['2º Trimestre']||{},t3=t['3º Trimestre']||{};const mts=[t1.mt,t2.mt,t3.mt].filter(x=>typeof x==='number');const mf=mts.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';return[d2,t1.mac||'-',t1.pt||'-',t1.mt||'-',t2.mac||'-',t2.pt||'-',t2.mt||'-',t3.mac||'-',t3.pt||'-',t3.mt||'-',String(mf)]});pdf.autoTable({head:[['Disc.','1T MAC','1T PT','1T MT','2T MAC','2T PT','2T MT','3T MAC','3T PT','3T MT','MF']],body,startY:y,theme:'grid',headStyles:{fillColor:[26,35,126],fontSize:5.5},styles:{fontSize:5.5}})}pdf.save(`Ficha_${(a.nome||'').replace(/\s/g,'_')}.pdf`);notify('Ficha PDF!','ok')}
+// RELATÓRIO ALUNOS XLSX COMPLETO (dados + notas, sem foto)
+async function exAlXL(){const als=await db.collection('escolas').doc(CSI).collection('alunos').get();const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));
+const hdr=['Nº','Matrícula','Processo','Nome','Classe','Turma','Género','Nascimento','Idade','Nacionalidade','Gr.Sang.','Naturalidade','Município','Província','Residência','BI','Cédula','Arquivo','Data BI','Assento','Pai','Prof.Pai','Mãe','Prof.Mãe','Encarregado','Parentesco','BI Enc.','Tel Enc.','Tel2 Enc.','Prof.Enc.','End.Enc.','Nec.Esp.','Alergias','Estado'];
+const discSnap=await db.collection('escolas').doc(CSI).collection('disciplinas').get();
+const discs=discSnap.docs.map(d=>d.data().nome).sort();
+discs.forEach(d=>{hdr.push(d+' MFD')});
+const rows=[hdr];
+for(const doc of sorted){const a=doc.data();
+const row=[a.numero,a.matricula,a.processo,a.nome,a.classe,a.turma,a.genero,a.nascimento,calcIdade(a.nascimento),a.nacionalidade,a.grupoSangue,a.naturalidade,a.municipio,a.provincia,a.residencia,a.bi,a.cedula,a.arquivo,a.biData,a.assento,a.nomePai,a.paiProfissao,a.nomeMae,a.maeProfissao,a.encNome,a.encParentesco,a.encBI,a.encTelefone,a.encTelefone2,a.encProfissao,a.encEndereco,a.necEspeciais,a.alergias,a.estado];
+const ns=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',doc.id).get();
+const byDisc={};ns.forEach(n=>{const nd=n.data();if(!byDisc[nd.disciplina])byDisc[nd.disciplina]=[];byDisc[nd.disciplina].push(nd.mt||0)});
+discs.forEach(d=>{const mts=byDisc[d];const mf=mts?.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';row.push(mf)});
+rows.push(row)}
+const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Alunos');XLSX.writeFile(wb,`Alunos_Completo_${CS.nome}.xlsx`);notify('XLSX completo!','ok')}
 
-// FIM DO BLOCO 2 - Continua no BLOCO 3
-// ===== LANÇAR NOTAS =====
-async function pgNotas(){const[cs,ds,anos]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('disciplinas').get(),db.collection('escolas').doc(CSI).collection('anosLetivos').get()]);$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📝 Lançar Notas</h3></div><div class="card-b"><div class="fp"><select id="nA">${anos.docs.map(d=>`<option value="${d.id}" ${d.data().estado==='aberto'?'selected':''}>${d.data().nome}</option>`).join('')}</select><select id="nC" onchange="lTN()"><option value="">Classe</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><select id="nT"><option value="">Turma</option></select><select id="nD"><option value="">Disciplina</option>${ds.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><select id="nTr"><option>1º Trimestre</option><option>2º Trimestre</option><option>3º Trimestre</option></select><button class="btn btn-p" onclick="lP()">📋</button></div><div id="pD"></div></div></div>`}
-async function lTN(){const c=$('nC').value;const s=await db.collection('escolas').doc(CSI).collection('turmas').where('classe','==',c).get();$('nT').innerHTML='<option value="">Turma</option>'+s.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}
-async function lP(){const cl=$('nC').value,tm=$('nT').value,dsc=$('nD').value,trim=$('nTr').value,aId=$('nA').value;if(!cl||!tm||!dsc){notify('Selecione!','er');return}const ad=await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(aId).get();const ano=ad.data(),aNm=ano.nome;const lk=ano.estado!=='aberto'||ano.trimestreEstado!=='aberto'||ano.trimestre!==trim;const dis=lk?'disabled':'';const mx=notaMax(cl);const als=await db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl).where('turma','==',tm).where('estado','==','ativo').get();const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));const ns=await db.collection('escolas').doc(CSI).collection('notas').where('classe','==',cl).where('turma','==',tm).where('disciplina','==',dsc).where('trimestre','==',trim).where('anoLetivo','==',aNm).get();const nm={};ns.forEach(d=>{nm[d.data().alunoId]=d.data()});let rows='',i=0;sorted.forEach(d=>{i++;const a=d.data(),n=nm[d.id]||{};rows+=`<tr><td>${i}</td><td style="text-align:left">${a.nome}</td><td><input type="number" min="0" max="${mx}" value="${n.av1||''}" class="ni" data-a="${d.id}" data-f="av1" style="width:36px" ${dis}></td><td><input type="number" min="0" max="${mx}" value="${n.av2||''}" class="ni" data-a="${d.id}" data-f="av2" style="width:36px" ${dis}></td><td><input type="number" min="0" max="${mx}" value="${n.av3||''}" class="ni" data-a="${d.id}" data-f="av3" style="width:36px" ${dis}></td><td><input type="number" min="0" max="${mx}" value="${n.av4||''}" class="ni" data-a="${d.id}" data-f="av4" style="width:36px" ${dis}></td><td id="mac_${d.id}" style="font-weight:700;text-align:center">-</td><td><input type="number" min="0" max="${mx}" value="${n.pt||''}" class="ni" data-a="${d.id}" data-f="pt" style="width:36px" ${dis}></td><td id="mt_${d.id}" style="font-weight:700;text-align:center;color:var(--p)">-</td></tr>`});$('pD').innerHTML=`${lk?'<div style="background:#fff3e0;padding:5px;color:var(--wn);font-weight:600;font-size:.72em">⚠️ Fechado</div>':''}<p style="font-size:.7em;color:var(--txl)">Notas: 0-${mx}</p><div class="tbl"><table><tr><th>#</th><th style="text-align:left">Nome</th><th>AV1</th><th>AV2</th><th>AV3</th><th>AV4</th><th>MAC</th><th>PT</th><th>MT</th></tr>${rows||'<tr><td colspan="9">Sem alunos</td></tr>'}</table></div>${!lk&&rows?'<button class="btn btn-ok mt-2" onclick="sN()">💾 Salvar</button>':''}`;document.querySelectorAll('.ni').forEach(inp=>{inp.addEventListener('input',()=>cN(inp.dataset.a))});sorted.forEach(d=>cN(d.id))}
-function cN(aid){const inps=document.querySelectorAll(`.ni[data-a="${aid}"]`);let a1=0,a2=0,a3=0,a4=0,pt=0;inps.forEach(i=>{const v=parseFloat(i.value)||0;if(i.dataset.f==='av1')a1=v;if(i.dataset.f==='av2')a2=v;if(i.dataset.f==='av3')a3=v;if(i.dataset.f==='av4')a4=v;if(i.dataset.f==='pt')pt=v});const mac=Math.round((a1+a2+a3+a4)/4);document.getElementById('mac_'+aid).textContent=mac||'-';const mt=pt>0?Math.round((mac+pt)/2):mac;document.getElementById('mt_'+aid).textContent=mt||'-'}
-async function sN(){const cl=$('nC').value,tm=$('nT').value,dsc=$('nD').value,tr=$('nTr').value,aId=$('nA').value;const ad=await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(aId).get();const ano=ad.data();if(ano.estado!=='aberto'||ano.trimestreEstado!=='aberto'||ano.trimestre!==tr){notify('Fechado!','er');return}const aNm=ano.nome;const aids=[...new Set([...document.querySelectorAll('.ni')].map(i=>i.dataset.a))];for(const aid of aids){const inps=document.querySelectorAll(`.ni[data-a="${aid}"]`);const d={alunoId:aid,classe:cl,turma:tm,disciplina:dsc,trimestre:tr,anoLetivo:aNm};inps.forEach(i=>{d[i.dataset.f]=parseFloat(i.value)||0});d.mac=Math.round(((d.av1||0)+(d.av2||0)+(d.av3||0)+(d.av4||0))/4);d.mt=d.pt>0?Math.round((d.mac+(d.pt||0))/2):d.mac;const ex=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('disciplina','==',dsc).where('trimestre','==',tr).where('anoLetivo','==',aNm).get();if(!ex.empty)await ex.docs[0].ref.update(d);else await db.collection('escolas').doc(CSI).collection('notas').add(d)}logAct('Notas');notify('Salvas!','ok')}
+// RELATÓRIO FUNCIONÁRIOS XLSX COMPLETO (sem foto)
+async function exUsXL(){const s=await db.collection('escolas').doc(CSI).collection('usuarios').get();
+const d=[['Nome','Perfil','BI','NIF','INSS','Género','Nascimento','Idade','Est.Civil','Nacionalidade','Pai','Mãe','Naturalidade','Província Orig.','Gr.Sangue','Habilitações','Curso','Instituição','Ano Concl.','Categoria','Nº Agente','Mecanográfico','Escalão','Regime','Data Admissão','Data Ingresso','Disciplinas','IRT','Telefone','Tel2','Email','Endereço','Estado']];
+[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||'')).forEach(x=>{const u=x.data();d.push([u.nome,PN[u.perfil]||u.perfil,u.bi,u.nif,u.inss,u.genero,u.nascimento,calcIdade(u.nascimento),u.estadoCivil,u.nacionalidade,u.nomePai,u.nomeMae,u.naturalidade,u.provOrigem,u.grupoSangue,u.habilitacoes,u.curso,u.instituicao,u.anoConclusao,u.categoria,u.agente,u.mecanografico,u.escalao,u.regime,u.dataAdmissao,u.dataIngresso,u.disciplinas,u.irt,u.telefone,u.telefone2,u.email,u.endereco,u.estado])});
+const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d),'Funcionários');XLSX.writeFile(wb,`Funcionarios_Completo_${CS.nome}.xlsx`);notify('XLSX!','ok')}
+
+// FIM BLOCO 2 CORRIGIDO
+// ===== BLOCO 3: Notas, Pautas, Presenças, Estatísticas, Histórico =====
+
+// LANÇAR NOTAS (apenas disciplinas atribuídas, fórmulas corretas)
+async function pgNotas(){
+const[cs,ds,anos]=await Promise.all([
+db.collection('escolas').doc(CSI).collection('classes').get(),
+db.collection('escolas').doc(CSI).collection('disciplinas').get(),
+db.collection('escolas').doc(CSI).collection('anosLetivos').get()
+]);
+// Se for PROFESSOR, filtrar apenas disciplinas/classes atribuídas
+let discsPermitidas=ds.docs;let classesPermitidas=cs.docs;
+if(CU.perfil==='professor'){
+const atribs=await db.collection('escolas').doc(CSI).collection('atribuicoes').where('professorId','==',CU.id).get();
+if(atribs.empty){$('eC').innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:20px;color:var(--wn)">⚠️ Você não tem disciplinas atribuídas. Contacte o Diretor.</div></div>';return}
+const discsAtr=new Set();const classesAtr=new Set();
+atribs.forEach(d=>{discsAtr.add(d.data().disciplina);classesAtr.add(d.data().classe)});
+discsPermitidas=ds.docs.filter(d=>discsAtr.has(d.data().nome));
+classesPermitidas=cs.docs.filter(d=>classesAtr.has(d.data().nome))}
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📝 Lançar Notas</h3></div><div class="card-b">
+<div class="fp">
+<select id="nA">${anos.docs.map(d=>`<option value="${d.id}" ${d.data().estado==='aberto'?'selected':''}>${d.data().nome}</option>`).join('')}</select>
+<select id="nC" onchange="lTN()"><option value="">Classe</option>${classesPermitidas.map(d=>`<option>${d.data().nome}</option>`).join('')}</select>
+<select id="nT"><option value="">Turma</option></select>
+<select id="nD"><option value="">Disciplina</option>${discsPermitidas.map(d=>`<option>${d.data().nome}</option>`).join('')}</select>
+<select id="nTr"><option>1º Trimestre</option><option>2º Trimestre</option><option>3º Trimestre</option></select>
+<button class="btn btn-p" onclick="lP()">📋</button>
+</div>
+<div id="pD"></div></div></div>`}
+
+async function lTN(){
+const c=$('nC').value;
+let q=db.collection('escolas').doc(CSI).collection('turmas').where('classe','==',c);
+const s=await q.get();
+// Se professor, filtrar turmas atribuídas
+let turmas=s.docs;
+if(CU.perfil==='professor'){
+const atribs=await db.collection('escolas').doc(CSI).collection('atribuicoes').where('professorId','==',CU.id).where('classe','==',c).get();
+const tmsAtr=new Set();
+atribs.forEach(d=>{const t=d.data().turma;if(t)tmsAtr.add(t)});
+// Se há turmas específicas atribuídas, filtrar. Se vazias (todas), mostrar todas.
+const temTurmaEspecifica=atribs.docs.some(d=>d.data().turma);
+if(temTurmaEspecifica)turmas=s.docs.filter(d=>tmsAtr.has(d.data().nome))}
+$('nT').innerHTML='<option value="">Turma</option>'+turmas.map(d=>`<option>${d.data().nome}</option>`).join('')}
+
+async function lP(){
+const cl=$('nC').value,tm=$('nT').value,dsc=$('nD').value,trim=$('nTr').value,aId=$('nA').value;
+if(!cl||!tm||!dsc){notify('Selecione!','er');return}
+// Verificar permissão se for professor
+if(CU.perfil==='professor'){const pode=await profPodeNotas(CU.id,dsc,cl);if(!pode){notify('Não tem atribuição para esta disciplina/classe!','er');return}}
+const ad=await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(aId).get();
+const ano=ad.data(),aNm=ano.nome;
+const lk=ano.estado!=='aberto'||ano.trimestreEstado!=='aberto'||ano.trimestre!==trim;
+const dis=lk?'disabled':'';
+const mx=notaMax(cl);
+const is3T=trim==='3º Trimestre';
+const isExame=is3T&&classeCertificado(cl);
+const als=await db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl).where('turma','==',tm).where('estado','==','ativo').get();
+const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));
+const ns=await db.collection('escolas').doc(CSI).collection('notas').where('classe','==',cl).where('turma','==',tm).where('disciplina','==',dsc).where('trimestre','==',trim).where('anoLetivo','==',aNm).get();
+const nm={};ns.forEach(d=>{nm[d.data().alunoId]=d.data()});
+let rows='',i=0;
+sorted.forEach(d=>{i++;const a=d.data(),n=nm[d.id]||{};
+if(isExame){
+// 3º Trimestre 6ª/9ª/12ª: MAC3 + CT3 + Exame Nacional
+rows+=`<tr><td>${i}</td><td style="text-align:left">${a.nome}</td>
+<td><input type="number" min="0" max="${mx}" value="${n.mac||''}" class="ni" data-a="${d.id}" data-f="mac" style="width:38px" ${dis}></td>
+<td id="ct3_${d.id}" style="font-weight:700;text-align:center">-</td>
+<td><input type="number" min="0" max="${mx}" value="${n.exame||''}" class="ni" data-a="${d.id}" data-f="exame" style="width:38px" ${dis}></td>
+<td id="mfd_${d.id}" style="font-weight:700;text-align:center;color:var(--p)">-</td></tr>`
+}else{
+// 1º e 2º Trimestre OU 3º normal: MAC + NPT + MT
+rows+=`<tr><td>${i}</td><td style="text-align:left">${a.nome}</td>
+<td><input type="number" min="0" max="${mx}" value="${n.mac||''}" class="ni" data-a="${d.id}" data-f="mac" style="width:38px" ${dis}></td>
+<td><input type="number" min="0" max="${mx}" value="${n.npt||''}" class="ni" data-a="${d.id}" data-f="npt" style="width:38px" ${dis}></td>
+<td id="mt_${d.id}" style="font-weight:700;text-align:center;color:var(--p)">-</td></tr>`}});
+const cols=isExame?['#','Nome','MAC3','CT3','Exame','MFD']:['#','Nome','MAC','NPT','MT'];
+$('pD').innerHTML=`${lk?'<div style="background:#fff3e0;padding:5px;color:var(--wn);font-weight:600;font-size:.7em">⚠️ Trimestre fechado</div>':''}
+<p style="font-size:.7em;color:var(--txl);margin-bottom:3px">Notas 0-${mx} ${isExame?'(3º Trim com Exame)':''}</p>
+<div class="tbl"><table><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>${rows||'<tr><td colspan="6">Sem alunos</td></tr>'}</table></div>
+${!lk&&rows?'<button class="btn btn-ok mt-2" onclick="sN()">💾 Salvar</button>':''}`;
+document.querySelectorAll('.ni').forEach(inp=>{inp.addEventListener('input',()=>cN(inp.dataset.a))});
+// Calcular CT3 para alunos com exame
+if(isExame){for(const d of sorted){await calcCT3(d.id,cl,tm,dsc,aNm)}}
+sorted.forEach(d=>cN(d.id))}
+
+// Calcular CT3 = (CT1 + CT2 + MAC3) / 3
+async function calcCT3(aid,cl,tm,dsc,aNm){
+const t1=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('disciplina','==',dsc).where('trimestre','==','1º Trimestre').where('anoLetivo','==',aNm).get();
+const t2=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('disciplina','==',dsc).where('trimestre','==','2º Trimestre').where('anoLetivo','==',aNm).get();
+const ct1=t1.empty?0:(t1.docs[0].data().mt||0);
+const ct2=t2.empty?0:(t2.docs[0].data().mt||0);
+const macEl=document.querySelector(`.ni[data-a="${aid}"][data-f="mac"]`);
+const mac3=parseFloat(macEl?.value)||0;
+const ct3=Math.round((ct1+ct2+mac3)/3);
+const ct3El=document.getElementById('ct3_'+aid);
+if(ct3El)ct3El.textContent=ct3||'-';
+ct3El?.setAttribute('data-ct3',ct3);
+return ct3}
+
+function cN(aid){
+const inps=document.querySelectorAll(`.ni[data-a="${aid}"]`);
+let mac=0,npt=0,exame=0;
+inps.forEach(i=>{const v=parseFloat(i.value)||0;if(i.dataset.f==='mac')mac=v;if(i.dataset.f==='npt')npt=v;if(i.dataset.f==='exame')exame=v});
+const trim=$('nTr')?.value||'';const cl=$('nC')?.value||'';
+const isExame=trim==='3º Trimestre'&&classeCertificado(cl);
+if(isExame){
+// MFD = (CT3 * 0.5) + (Exame * 0.5)
+const ct3El=document.getElementById('ct3_'+aid);
+const ct3=parseFloat(ct3El?.getAttribute('data-ct3'))||0;
+const mfd=Math.round((ct3*0.5)+(exame*0.5));
+const mfdEl=document.getElementById('mfd_'+aid);if(mfdEl)mfdEl.textContent=mfd||'-'
+}else{
+// MT = (MAC + NPT) / 2
+const mt=npt>0?Math.round((mac+npt)/2):mac;
+const mtEl=document.getElementById('mt_'+aid);if(mtEl)mtEl.textContent=mt||'-'}}
+
+async function sN(){
+const cl=$('nC').value,tm=$('nT').value,dsc=$('nD').value,tr=$('nTr').value,aId=$('nA').value;
+const ad=await db.collection('escolas').doc(CSI).collection('anosLetivos').doc(aId).get();
+const ano=ad.data();
+if(ano.estado!=='aberto'||ano.trimestreEstado!=='aberto'||ano.trimestre!==tr){notify('Fechado!','er');return}
+const aNm=ano.nome;
+const isExame=tr==='3º Trimestre'&&classeCertificado(cl);
+const aids=[...new Set([...document.querySelectorAll('.ni')].map(i=>i.dataset.a))];
+for(const aid of aids){
+const inps=document.querySelectorAll(`.ni[data-a="${aid}"]`);
+const d={alunoId:aid,classe:cl,turma:tm,disciplina:dsc,trimestre:tr,anoLetivo:aNm};
+inps.forEach(i=>{d[i.dataset.f]=parseFloat(i.value)||0});
+if(isExame){
+// Buscar CT1 e CT2 para calcular CT3
+const t1q=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('disciplina','==',dsc).where('trimestre','==','1º Trimestre').where('anoLetivo','==',aNm).get();
+const t2q=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('disciplina','==',dsc).where('trimestre','==','2º Trimestre').where('anoLetivo','==',aNm).get();
+const ct1=t1q.empty?0:(t1q.docs[0].data().mt||0);
+const ct2=t2q.empty?0:(t2q.docs[0].data().mt||0);
+d.ct3=Math.round((ct1+ct2+(d.mac||0))/3);
+d.mt=Math.round((d.ct3*0.5)+((d.exame||0)*0.5)) // MFD para 3T exame
+}else{
+// MT = (MAC + NPT) / 2
+d.mt=(d.npt||0)>0?Math.round(((d.mac||0)+(d.npt||0))/2):(d.mac||0)}
+const ex=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('disciplina','==',dsc).where('trimestre','==',tr).where('anoLetivo','==',aNm).get();
+if(!ex.empty)await ex.docs[0].ref.update(d);else await db.collection('escolas').doc(CSI).collection('notas').add(d)}
+logAct('Notas: '+dsc+' '+cl);notify('Salvas!','ok')}
 
 // ===== PAUTAS =====
-async function pgPautas(){const[cs,anos]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('anosLetivos').get()]);$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📋 Pautas</h3></div><div class="card-b"><div class="fp"><select id="pgAno">${anos.docs.map(d=>`<option value="${d.data().nome}" ${d.data().estado==='aberto'?'selected':''}>${d.data().nome}</option>`).join('')}</select><select id="pgCl" onchange="ldPgTm()"><option value="">Classe</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><select id="pgTm"><option value="">Turma</option></select><select id="pgTrim"><option value="">Todos</option><option>1º Trimestre</option><option>2º Trimestre</option><option>3º Trimestre</option></select><button class="btn btn-p" onclick="loadPauta()">📋</button></div><div id="pgDiv"></div></div></div>`}
+async function pgPautas(){
+const[cs,anos]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('anosLetivos').get()]);
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📋 Pautas</h3></div><div class="card-b">
+<div class="fp">
+<select id="pgAno">${anos.docs.map(d=>`<option value="${d.data().nome}" ${d.data().estado==='aberto'?'selected':''}>${d.data().nome}</option>`).join('')}</select>
+<select id="pgCl" onchange="ldPgTm()"><option value="">Classe</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select>
+<select id="pgTm"><option value="">Turma</option></select>
+<select id="pgTrim"><option value="">Anual (Todos)</option><option>1º Trimestre</option><option>2º Trimestre</option><option>3º Trimestre</option></select>
+<button class="btn btn-p" onclick="loadPauta()">📋</button>
+</div><div id="pgDiv"></div></div></div>`}
+
 async function ldPgTm(){const c=$('pgCl').value;const s=await db.collection('escolas').doc(CSI).collection('turmas').where('classe','==',c).get();$('pgTm').innerHTML='<option value="">Turma</option>'+s.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}
-async function loadPauta(){const anoLet=$('pgAno').value,cl=$('pgCl').value,tm=$('pgTm').value,trimF=$('pgTrim').value;if(!cl){notify('Classe!','er');return}let qAl=db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl);if(tm)qAl=qAl.where('turma','==',tm);const alsSnap=await qAl.get();const alunos=[...alsSnap.docs].map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));let qN=db.collection('escolas').doc(CSI).collection('notas').where('classe','==',cl).where('anoLetivo','==',anoLet);if(tm)qN=qN.where('turma','==',tm);if(trimF)qN=qN.where('trimestre','==',trimF);const notasSnap=await qN.get();const discSet=new Set();const notasByAluno={};notasSnap.forEach(d=>{const n=d.data();discSet.add(n.disciplina);if(!notasByAluno[n.alunoId])notasByAluno[n.alunoId]={};if(!notasByAluno[n.alunoId][n.disciplina])notasByAluno[n.alunoId][n.disciplina]={};notasByAluno[n.alunoId][n.disciplina][n.trimestre]=n});const disciplinas=[...discSet].sort();const trims=trimF?[trimF]:['1º Trimestre','2º Trimestre','3º Trimestre'];const mx=notaMax(cl);const lim=isPrimario(cl)?5:10;let thD='';disciplinas.forEach(disc=>{trims.forEach(tr=>{thD+=`<th style="font-size:.5em">${disc.substring(0,3)}<br>${tr.substring(0,2)} MAC</th><th style="font-size:.5em">${disc.substring(0,3)}<br>${tr.substring(0,2)} PT</th><th style="font-size:.5em">${disc.substring(0,3)}<br>${tr.substring(0,2)} MT</th>`});if(trims.length>1)thD+=`<th style="font-size:.5em;background:#283593">${disc.substring(0,3)}<br>MF</th>`});let body='';alunos.forEach((al,idx)=>{let tMF=0,cMF=0,tds='';disciplinas.forEach(disc=>{const dn=notasByAluno[al.id]?.[disc]||{};let mfN=[];trims.forEach(tr=>{const n=dn[tr];const mac=n?.mac||'-',pt=n?.pt||'-',mt=n?.mt||'-';const ok=typeof mt==='number'&&mt>=lim;tds+=`<td class="${typeof mt==='number'?(ok?'nota-ok':'nota-dg'):''}">${mac}</td><td>${pt}</td><td class="${typeof mt==='number'?(ok?'nota-ok':'nota-dg'):''}">${mt}</td>`;if(typeof mt==='number')mfN.push(mt)});if(trims.length>1){const mf=mfN.length?Math.round(mfN.reduce((a,b)=>a+b,0)/mfN.length):'-';tds+=`<td style="font-weight:700">${mf}</td>`;if(typeof mf==='number'){tMF+=mf;cMF++}}});const mg=cMF?Math.round(tMF/cMF):'-';let obs='';if(al.estado==='transferido')obs='Transf.';else if(al.estado==='desistente')obs='Desist.';else if(typeof mg==='number')obs=mg>=lim?'Aprov.':'Reprov.';body+=`<tr><td>${idx+1}</td><td class="nome">${al.nome}</td>${tds}<td style="font-weight:700">${mg}</td><td>${obs}</td></tr>`});$('pgDiv').innerHTML=`<h4 style="font-size:.78em;margin:5px 0">${cl}${tm?' / '+tm:''} — ${anoLet}${trimF?' — '+trimF:''}</h4><div class="tbl"><table class="pauta-tbl" id="pautaG"><tr><th>#</th><th style="text-align:left;min-width:90px">Nome</th>${thD}<th>MG</th><th>Obs</th></tr>${body||'<tr><td colspan="20">Sem dados</td></tr>'}</table></div><div class="btn-group mt-2"><button class="btn btn-ok" onclick="expPXL()">📊 XLSX</button><button class="btn btn-s" onclick="expPPDF()">📄 PDF</button></div>`}
+
+async function loadPauta(){
+const anoLet=$('pgAno').value,cl=$('pgCl').value,tm=$('pgTm').value,trimF=$('pgTrim').value;
+if(!cl){notify('Classe!','er');return}
+let qAl=db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl);
+if(tm)qAl=qAl.where('turma','==',tm);
+const alsSnap=await qAl.get();
+const alunos=[...alsSnap.docs].map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+let qN=db.collection('escolas').doc(CSI).collection('notas').where('classe','==',cl).where('anoLetivo','==',anoLet);
+if(tm)qN=qN.where('turma','==',tm);
+if(trimF)qN=qN.where('trimestre','==',trimF);
+const notasSnap=await qN.get();
+const discSet=new Set();const notasByAluno={};
+notasSnap.forEach(d=>{const n=d.data();discSet.add(n.disciplina);if(!notasByAluno[n.alunoId])notasByAluno[n.alunoId]={};if(!notasByAluno[n.alunoId][n.disciplina])notasByAluno[n.alunoId][n.disciplina]={};notasByAluno[n.alunoId][n.disciplina][n.trimestre]=n});
+const disciplinas=[...discSet].sort();
+const trims=trimF?[trimF]:['1º Trimestre','2º Trimestre','3º Trimestre'];
+const isAnual=!trimF; // Quando todos trimestres, mostrar MFD
+const mx=notaMax(cl);
+const lim=isPrimario(cl)?5:10;
+
+// Construir cabeçalho
+let thD='';
+disciplinas.forEach(disc=>{
+trims.forEach(tr=>{
+const ex=tr==='3º Trimestre'&&classeCertificado(cl);
+if(ex){thD+=`<th style="font-size:.5em">${disc.substring(0,3)}<br>3T MAC</th><th style="font-size:.5em">${disc.substring(0,3)}<br>CT3</th><th style="font-size:.5em">${disc.substring(0,3)}<br>Exame</th><th style="font-size:.5em">${disc.substring(0,3)}<br>MFD</th>`}
+else{thD+=`<th style="font-size:.5em">${disc.substring(0,3)}<br>${tr.substring(0,2)} MAC</th><th style="font-size:.5em">${disc.substring(0,3)}<br>${tr.substring(0,2)} NPT</th><th style="font-size:.5em">${disc.substring(0,3)}<br>${tr.substring(0,2)} MT</th>`}});
+if(isAnual)thD+=`<th style="font-size:.5em;background:#283593">${disc.substring(0,3)}<br>MFD</th>`});
+
+let body='';
+alunos.forEach((al,idx)=>{
+let tMFD=0,cMFD=0,tds='';
+disciplinas.forEach(disc=>{
+const dn=notasByAluno[al.id]?.[disc]||{};
+let mfds=[];
+trims.forEach(tr=>{
+const n=dn[tr];
+const ex=tr==='3º Trimestre'&&classeCertificado(cl);
+if(ex){
+const mac=n?.mac||'-';const ct3=n?.ct3||'-';const exame=n?.exame||'-';const mfd=n?.mt||'-';
+const ok=typeof mfd==='number'&&mfd>=lim;
+tds+=`<td>${mac}</td><td>${ct3}</td><td>${exame}</td><td class="${typeof mfd==='number'?(ok?'nota-ok':'nota-dg'):''}">${mfd}</td>`;
+if(typeof mfd==='number')mfds.push(mfd)
+}else{
+const mac=n?.mac||'-';const npt=n?.npt||'-';const mt=n?.mt||'-';
+const ok=typeof mt==='number'&&mt>=lim;
+tds+=`<td>${mac}</td><td>${npt}</td><td class="${typeof mt==='number'?(ok?'nota-ok':'nota-dg'):''}">${mt}</td>`;
+if(typeof mt==='number')mfds.push(mt)}});
+if(isAnual){
+const mfd=mfds.length?Math.round(mfds.reduce((a,b)=>a+b,0)/mfds.length):'-';
+tds+=`<td style="font-weight:700" class="${typeof mfd==='number'?(mfd>=lim?'nota-ok':'nota-dg'):''}">${mfd}</td>`;
+if(typeof mfd==='number'){tMFD+=mfd;cMFD++}}});
+const mg=cMFD?Math.round(tMFD/cMFD):'-';
+let obs='';if(al.estado==='transferido')obs='Transf.';else if(al.estado==='desistente')obs='Desist.';else if(typeof mg==='number')obs=mg>=lim?'Aprov.':'Reprov.';
+body+=`<tr><td>${idx+1}</td><td class="nome">${al.nome}</td>${tds}${isAnual?`<td style="font-weight:700">${mg}</td><td>${obs}</td>`:''}</tr>`});
+
+$('pgDiv').innerHTML=`<h4 style="font-size:.76em;margin:4px 0">${cl}${tm?' / '+tm:''} — ${anoLet}${trimF?' — '+trimF:' (Anual)'}</h4>
+<div class="tbl"><table class="pauta-tbl" id="pautaG"><tr><th>#</th><th style="text-align:left;min-width:80px">Nome</th>${thD}${isAnual?'<th>MG</th><th>Obs</th>':''}</tr>${body||'<tr><td colspan="20">—</td></tr>'}</table></div>
+<div class="btn-group mt-2"><button class="btn btn-ok" onclick="expPXL()">📊 XLSX</button><button class="btn btn-s" onclick="expPPDF()">📄 PDF</button></div>`}
+
 function expPXL(){const t=document.querySelector('#pautaG');if(!t)return;const wb=XLSX.utils.table_to_book(t);XLSX.writeFile(wb,'Pauta.xlsx');notify('XLSX!','ok')}
 function expPPDF(){const{jsPDF}=window.jspdf;const pdf=new jsPDF('l');pdf.setFontSize(10);pdf.text('PAUTA — '+CS.nome,148,8,{align:'center'});const t=document.querySelector('#pautaG');if(t)pdf.autoTable({html:t,startY:13,theme:'grid',headStyles:{fillColor:[26,35,126],fontSize:4.5},styles:{fontSize:5,cellPadding:1.2},columnStyles:{1:{halign:'left'}}});pdf.save('Pauta.pdf');notify('PDF!','ok')}
 
@@ -324,107 +684,519 @@ async function lTmPr(){const c=$('pCl').value;const s=await db.collection('escol
 async function ldPr(){const cl=$('pCl').value,tm=$('pTm').value,dt=$('pDt').value;if(!cl||!tm){notify('Selecione!','er');return}const als=await db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl).where('turma','==',tm).where('estado','==','ativo').get();const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));const ps=await db.collection('escolas').doc(CSI).collection('presencas').where('classe','==',cl).where('turma','==',tm).where('data','==',dt).get();const pm={};ps.forEach(d=>{pm[d.data().alunoId]=d.data().presente});let r='',i=0;sorted.forEach(d=>{i++;r+=`<tr><td>${i}</td><td>${d.data().nome}</td><td><label><input type="checkbox" ${pm[d.id]!==false?'checked':''} class="pc" data-a="${d.id}"> Presente</label></td></tr>`});$('prD').innerHTML=`<table><tr><th>#</th><th>Nome</th><th>Presença</th></tr>${r}</table><button class="btn btn-ok mt-2" onclick="svPr()">💾</button>`}
 async function svPr(){const cl=$('pCl').value,tm=$('pTm').value,dt=$('pDt').value;for(const c of document.querySelectorAll('.pc')){const aid=c.dataset.a,pres=c.checked;const ex=await db.collection('escolas').doc(CSI).collection('presencas').where('alunoId','==',aid).where('data','==',dt).get();if(!ex.empty)await ex.docs[0].ref.update({presente:pres});else await db.collection('escolas').doc(CSI).collection('presencas').add({alunoId:aid,classe:cl,turma:tm,data:dt,presente:pres})}notify('OK','ok')}
 
-// ===== ESTATÍSTICAS =====
-async function pgStats(){const als=await db.collection('escolas').doc(CSI).collection('alunos').get();let t=als.size,m=0,f=0,at=0,tr=0,ds=0;const byCl={};als.forEach(d=>{const a=d.data();a.genero==='M'?m++:f++;if(a.estado==='ativo')at++;if(a.estado==='transferido')tr++;if(a.estado==='desistente')ds++;if(!byCl[a.classe])byCl[a.classe]={m:0,f:0};a.genero==='M'?byCl[a.classe].m++:byCl[a.classe].f++});$('eC').innerHTML=`<div class="sg"><div class="sc"><div class="sci bl">👥</div><div class="scn"><h3>${t}</h3><p>Total</p></div></div><div class="sc"><div class="sci gn">✅</div><div class="scn"><h3>${at}</h3><p>Ativos</p></div></div><div class="sc"><div class="sci or">🔄</div><div class="scn"><h3>${tr}</h3><p>Transf.</p></div></div><div class="sc"><div class="sci rd">❌</div><div class="scn"><h3>${ds}</h3><p>Desist.</p></div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="card"><div class="card-h"><h3>📊 Classe/Género</h3></div><div class="card-b"><div style="height:200px"><canvas id="chSCl"></canvas></div></div></div><div class="card"><div class="card-h"><h3>📊 Estado</h3></div><div class="card-b"><div style="height:200px"><canvas id="chSEst"></canvas></div></div></div></div>`;setTimeout(()=>{const cls=Object.keys(byCl).sort();drawChart('chSCl','bar',cls,[{label:'♂',data:cls.map(c=>byCl[c].m),backgroundColor:'#1565c0'},{label:'♀',data:cls.map(c=>byCl[c].f),backgroundColor:'#e65100'}]);drawChart('chSEst','pie',['Ativos','Transf.','Desist.'],[{data:[at,tr,ds],backgroundColor:['#2e7d32','#ff9800','#c62828']}])},100)}
+// ===== ESTATÍSTICAS (com exportação XLSX e PDF) =====
+async function pgStats(){
+const als=await db.collection('escolas').doc(CSI).collection('alunos').get();
+let t=als.size,m=0,f=0,at=0,tr=0,ds=0;const byCl={};
+als.forEach(d=>{const a=d.data();a.genero==='M'?m++:f++;if(a.estado==='ativo')at++;if(a.estado==='transferido')tr++;if(a.estado==='desistente')ds++;if(!byCl[a.classe])byCl[a.classe]={m:0,f:0,t:0};a.genero==='M'?byCl[a.classe].m++:byCl[a.classe].f++;byCl[a.classe].t++});
+$('eC').innerHTML=`<div class="sg">
+<div class="sc"><div class="sci bl">👥</div><div class="scn"><h3>${t}</h3><p>Total</p></div></div>
+<div class="sc"><div class="sci gn">✅</div><div class="scn"><h3>${at}</h3><p>Ativos</p></div></div>
+<div class="sc"><div class="sci or">🔄</div><div class="scn"><h3>${tr}</h3><p>Transf.</p></div></div>
+<div class="sc"><div class="sci rd">❌</div><div class="scn"><h3>${ds}</h3><p>Desist.</p></div></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+<div class="card"><div class="card-h"><h3>📊 Classe/Género</h3></div><div class="card-b"><div style="height:200px"><canvas id="chSCl"></canvas></div></div></div>
+<div class="card"><div class="card-h"><h3>📊 Estado</h3></div><div class="card-b"><div style="height:200px"><canvas id="chSEst"></canvas></div></div></div>
+</div>
+<div class="btn-group mt-2">
+<button class="btn btn-ok" onclick="stXL()">📊 XLSX</button>
+<button class="btn btn-s" onclick="stPDF()">📄 PDF</button>
+</div>`;
+setTimeout(()=>{const cls=Object.keys(byCl).sort();drawChart('chSCl','bar',cls,[{label:'♂',data:cls.map(c=>byCl[c].m),backgroundColor:'#1565c0'},{label:'♀',data:cls.map(c=>byCl[c].f),backgroundColor:'#e65100'}]);drawChart('chSEst','pie',['Ativos','Transf.','Desist.'],[{data:[at,tr,ds],backgroundColor:['#2e7d32','#ff9800','#c62828']}])},100)}
 
-// ===== DECLARAÇÕES E BOLETINS =====
-async function pgDocs(){const[cs,anos]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('anosLetivos').get()]);$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📜 Declarações e Boletins</h3></div><div class="card-b"><div class="fp"><select id="docTipo"><option value="decl">Declaração (médias finais)</option><option value="bolet">Boletim (MAC, PT, MT)</option></select><select id="docAno">${anos.docs.map(d=>`<option value="${d.data().nome}">${d.data().nome}</option>`).join('')}</select><select id="docCl" onchange="ldDocTm()"><option value="">Classe</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><select id="docTm"><option value="">Turma</option></select><button class="btn btn-p" onclick="ldDocAl()">📋</button></div><div id="docDiv"></div></div></div>`}
+async function stXL(){
+const als=await db.collection('escolas').doc(CSI).collection('alunos').get();
+let t=als.size,m=0,f=0,at=0,tr=0,ds=0;const byCl={};
+als.forEach(d=>{const a=d.data();a.genero==='M'?m++:f++;if(a.estado==='ativo')at++;if(a.estado==='transferido')tr++;if(a.estado==='desistente')ds++;if(!byCl[a.classe])byCl[a.classe]={m:0,f:0,t:0};a.genero==='M'?byCl[a.classe].m++:byCl[a.classe].f++;byCl[a.classe].t++});
+const data=[['ESTATÍSTICAS GERAIS — '+CS.nome],[],['Total Alunos',t],['Masculino',m],['Feminino',f],['Ativos',at],['Transferidos',tr],['Desistentes',ds],[],['POR CLASSE'],['Classe','Total','Masc.','Fem.']];
+Object.entries(byCl).sort().forEach(([c,v])=>{data.push([c,v.t,v.m,v.f])});
+const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(data),'Estatísticas');XLSX.writeFile(wb,`Estatisticas_${CS.nome}.xlsx`);notify('XLSX!','ok')}
+
+async function stPDF(){
+const{jsPDF}=window.jspdf;const pdf=new jsPDF();
+pdf.setFontSize(14);pdf.text('ESTATÍSTICAS - '+CS.nome,105,15,{align:'center'});
+pdf.setFontSize(9);pdf.text('Data: '+new Date().toLocaleDateString('pt-AO'),105,22,{align:'center'});
+const als=await db.collection('escolas').doc(CSI).collection('alunos').get();
+let t=als.size,m=0,f=0,at=0,tr=0,ds=0;const byCl={};
+als.forEach(d=>{const a=d.data();a.genero==='M'?m++:f++;if(a.estado==='ativo')at++;if(a.estado==='transferido')tr++;if(a.estado==='desistente')ds++;if(!byCl[a.classe])byCl[a.classe]={m:0,f:0,t:0};a.genero==='M'?byCl[a.classe].m++:byCl[a.classe].f++;byCl[a.classe].t++});
+let y=32;pdf.setFontSize(10);
+pdf.text(`Total: ${t} | Ativos: ${at} | Transf.: ${tr} | Desist.: ${ds}`,15,y);y+=6;
+pdf.text(`Masculino: ${m} | Feminino: ${f}`,15,y);y+=10;
+pdf.autoTable({head:[['Classe','Total','Masc.','Fem.']],body:Object.entries(byCl).sort().map(([c,v])=>[c,v.t,v.m,v.f]),startY:y,theme:'grid',headStyles:{fillColor:[26,35,126]}});
+pdf.save(`Estatisticas_${CS.nome}.pdf`);notify('PDF!','ok')}
+
+// ===== HISTÓRICO DE NOTAS (para certificados) =====
+async function pgHistNotas(){
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📚 Histórico de Notas (Classes Anteriores)</h3></div><div class="card-b">
+<p style="font-size:.72em;color:var(--txl);margin-bottom:5px">Complete notas das classes anteriores para gerar certificados (6ª, 9ª e 12ª).</p>
+<div class="fp">
+<input type="text" id="hNm" placeholder="🔍 Nome do aluno..." style="flex:1;max-width:240px">
+<button class="btn btn-p" onclick="buscarAlunoHist()">🔍</button>
+</div>
+<div id="histDiv"></div>
+</div></div>`}
+
+async function buscarAlunoHist(){
+const nm=$('hNm').value.trim().toLowerCase();
+if(!nm||nm.length<3){notify('Digite 3 letras+','er');return}
+const als=await db.collection('escolas').doc(CSI).collection('alunos').get();
+const m=[];als.forEach(d=>{const a=d.data();if(a.nome?.toLowerCase().includes(nm))m.push({id:d.id,...a})});
+if(!m.length){$('histDiv').innerHTML='<p style="color:var(--txl)">Nenhum encontrado</p>';return}
+let r='';m.sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(a=>{
+r+=`<tr><td>${a.nome}</td><td>${a.classe||''}</td><td><button class="btn btn-sm btn-inf" onclick="editHistNotas('${a.id}','${a.nome.replace(/'/g,"\\'")}')">📝 Editar</button></td></tr>`});
+$('histDiv').innerHTML=`<table><tr><th>Nome</th><th>Classe</th><th></th></tr>${r}</table>`}
+
+async function editHistNotas(aid,nome){
+const histSnap=await db.collection('escolas').doc(CSI).collection('histNotas').where('alunoId','==',aid).get();
+const hist={};histSnap.forEach(d=>{const h=d.data();if(!hist[h.classe])hist[h.classe]={};hist[h.classe][h.disciplina]=h});
+const discSnap=await db.collection('escolas').doc(CSI).collection('disciplinas').get();
+const disciplinas=[...discSnap.docs].map(d=>d.data().nome).sort();
+const aluno=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();
+const classeAtual=aluno.data().classe||'';
+// Determinar classes anteriores
+let classesAnt=[];
+if(classeAtual.includes('6ª'))classesAnt=['1ª Classe','2ª Classe','3ª Classe','4ª Classe','5ª Classe'];
+else if(classeAtual.includes('9ª'))classesAnt=['7ª Classe','8ª Classe'];
+else if(classeAtual.includes('12ª'))classesAnt=['10ª Classe','11ª Classe'];
+else{notify('Aluno não está em 6ª, 9ª ou 12ª','wn');return}
+let f='';
+classesAnt.forEach(cl=>{
+f+=`<h4 style="margin:5px 0;font-size:.78em;color:var(--p)">${cl}</h4><table><tr><th>Disciplina</th><th>MFD</th></tr>`;
+disciplinas.forEach(disc=>{
+const val=hist[cl]?.[disc]?.mediaFinal||'';
+f+=`<tr><td>${disc}</td><td><input type="number" min="0" max="${notaMax(cl)}" value="${val}" class="hni" data-cl="${cl}" data-disc="${disc}" style="width:45px"></td></tr>`});
+f+=`</table>`});
+$('mB').className='modal lg';
+$('mB').innerHTML=`<div class="mh"><h3>📚 ${nome}</h3><button class="mx" onclick="cM()">×</button></div><div class="mb">${f}</div><div class="mf"><button class="btn btn-p" onclick="salvarHistNotas('${aid}')">💾 Salvar</button></div>`;oM()}
+
+async function salvarHistNotas(aid){
+const inps=document.querySelectorAll('.hni');
+for(const inp of inps){
+const cl=inp.dataset.cl;const disc=inp.dataset.disc;const val=parseFloat(inp.value)||0;
+if(val<=0)continue;
+const ex=await db.collection('escolas').doc(CSI).collection('histNotas').where('alunoId','==',aid).where('classe','==',cl).where('disciplina','==',disc).get();
+if(!ex.empty)await ex.docs[0].ref.update({mediaFinal:val});
+else await db.collection('escolas').doc(CSI).collection('histNotas').add({alunoId:aid,classe:cl,disciplina:disc,mediaFinal:val,criadoEm:ts()})}
+notify('Histórico salvo!','ok');cM()}
+
+// FIM BLOCO 3 - Peça "Continue com o BLOCO 4"
+// ===== BLOCO 4: Documentos, Certificados, Financeiro, Admin, Backup, Mensagens, Init =====
+
+// BRASÃO DA REPÚBLICA DE ANGOLA (SVG em base64)
+const BRASAO_ANGOLA='data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#fff" stroke="#000" stroke-width="2"/><path d="M50 15 L55 35 L75 35 L60 47 L65 67 L50 55 L35 67 L40 47 L25 35 L45 35 Z" fill="#ffcc00" stroke="#000"/><text x="50" y="85" text-anchor="middle" font-size="6" font-weight="bold">ANGOLA</text></svg>');
+
+// ===== DOCUMENTOS (Declarações e Boletins) =====
+async function pgDocs(){
+const[cs,anos]=await Promise.all([db.collection('escolas').doc(CSI).collection('classes').get(),db.collection('escolas').doc(CSI).collection('anosLetivos').get()]);
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📜 Declarações e Boletins</h3></div><div class="card-b">
+<div class="fp">
+<select id="docTipo"><option value="decl">Declaração (médias do ano)</option><option value="bolet1">Boletim 1º Trimestre</option><option value="bolet2">Boletim 2º Trimestre</option></select>
+<select id="docAno">${anos.docs.map(d=>`<option value="${d.data().nome}">${d.data().nome}</option>`).join('')}</select>
+<select id="docCl" onchange="ldDocTm()"><option value="">Classe</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select>
+<select id="docTm"><option value="">Turma</option></select>
+<button class="btn btn-p" onclick="ldDocAl()">📋</button>
+</div><div id="docDiv"></div></div></div>`}
+
 async function ldDocTm(){const c=$('docCl').value;const s=await db.collection('escolas').doc(CSI).collection('turmas').where('classe','==',c).get();$('docTm').innerHTML='<option value="">Turma</option>'+s.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}
-async function ldDocAl(){const cl=$('docCl').value;if(!cl)return;let q=db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl);const tm=$('docTm').value;if(tm)q=q.where('turma','==',tm);const s=await q.get();const sorted=[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const a=d.data();r+=`<tr><td>${a.nome}</td><td>${a.classe}</td><td><button class="btn btn-sm btn-p" onclick="gerarDocx('${d.id}')">DOCX</button> <button class="btn btn-sm btn-s" onclick="gerarPDF('${d.id}')">PDF</button></td></tr>`});$('docDiv').innerHTML=`<table><tr><th>Nome</th><th>Classe</th><th>Ações</th></tr>${r}</table>`}
 
-async function gerarDocx(aid){const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();const anoLet=$('docAno').value;const tipo=$('docTipo').value;const tt=tipo==='decl'?'DECLARAÇÃO':'BOLETIM DE NOTAS';const qrText=`SIGE|${tt}|${e.nome}|${a.nome}|${a.bi||''}|${anoLet}`;let qrB64;try{qrB64=await QRCode.toDataURL(qrText,{width:120})}catch(ex){qrB64=null}
-try{const{Document,Packer,Paragraph,TextRun,AlignmentType,Table,TableRow,TableCell,WidthType,ImageRun}=docx;const ch=[];
-ch.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'REPÚBLICA DE ANGOLA',bold:true,size:22})]}));
-ch.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'MINISTÉRIO DA EDUCAÇÃO',bold:true,size:22})]}));
-ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:300},children:[new TextRun({text:tt,bold:true,size:30,color:'990000'})]}));
+async function ldDocAl(){const cl=$('docCl').value;if(!cl)return;let q=db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl);const tm=$('docTm').value;if(tm)q=q.where('turma','==',tm);const s=await q.get();const sorted=[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const a=d.data();r+=`<tr><td>${a.nome}</td><td>${a.classe}</td><td><button class="btn btn-sm btn-p" onclick="gerarDocx('${d.id}')">📄 DOCX</button> <button class="btn btn-sm btn-s" onclick="gerarPDF('${d.id}')">📄 PDF</button></td></tr>`});$('docDiv').innerHTML=`<table><tr><th>Nome</th><th>Classe</th><th>Ações</th></tr>${r}</table>`}
+
+async function gerarDocx(aid){
+const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();
+const anoLet=$('docAno').value;const tipo=$('docTipo').value;
+const tt=tipo==='decl'?'DECLARAÇÃO':'BOLETIM DE NOTAS';
+const trimNum=tipo==='bolet1'?'1º Trimestre':tipo==='bolet2'?'2º Trimestre':'';
+const qrText=`SIGE|${tt}|${e.nome}|${a.nome}|${a.bi||''}|${anoLet}|${new Date().toISOString()}`;
+let qrB64;try{qrB64=await QRCode.toDataURL(qrText,{width:120})}catch(ex){qrB64=null}
+try{
+const{Document,Packer,Paragraph,TextRun,AlignmentType,Table,TableRow,TableCell,WidthType,ImageRun}=docx;
+const ch=[];
+// Brasão (representado como texto centralizado)
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:60},children:[new TextRun({text:'★',bold:true,size:36,color:'CC0000'})]}));
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:40},children:[new TextRun({text:'REPÚBLICA DE ANGOLA',bold:true,size:24,font:'Times New Roman'})]}));
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:200},children:[new TextRun({text:'MINISTÉRIO DA EDUCAÇÃO',bold:true,size:24,font:'Times New Roman'})]}));
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:300},children:[new TextRun({text:tt,bold:true,size:32,color:'990000',font:'Times New Roman'})]}));
+const hoje=new Date();
 const ns=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('anoLetivo','==',anoLet).get();
 const bd={};ns.forEach(d=>{const n=d.data();if(!bd[n.disciplina])bd[n.disciplina]={};bd[n.disciplina][n.trimestre]=n});
 if(tipo==='decl'){
-ch.push(new Paragraph({spacing:{after:200},children:[new TextRun({text:`${dir.nome}, Director do Complexo Escolar N.º ${e.numero||'___'}, declara que ${a.nome}, filho(a) de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, portador(a) do B.I. nº ${a.bi||'___'}, é aluno(a) da ${a.classe||'___'}, turma ${a.turma||'___'}, no ano lectivo ${anoLet}, com as seguintes médias:`,size:22})]}));
-if(Object.keys(bd).length){const hdr=new TableRow({children:['Disciplina','Média Final','Por extenso'].map(h=>new TableCell({children:[new Paragraph({children:[new TextRun({text:h,bold:true,size:18})]})]}))});const drs=Object.entries(bd).sort().map(([d,t])=>{const mts=Object.values(t).map(n=>n.mt).filter(x=>typeof x==='number');const mf=mts.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';return new TableRow({children:[d,String(mf),typeof mf==='number'?numExt(mf):'-'].map(v=>new TableCell({children:[new Paragraph({children:[new TextRun({text:v,size:18})]})]}))})});ch.push(new Table({rows:[hdr,...drs],width:{size:100,type:WidthType.PERCENTAGE}}))}
+// DECLARAÇÃO - médias finais do ano
+const corpo=`${dir.nome}, Director do Complexo Escolar N.º ${e.numero||'___'}, denominado ${e.denominacao||e.nome}, criado sob o Decreto Executivo n.º ${e.decreto||'___'}, ao abrigo do disposto na alínea e) do artigo 109.º da Lei n.º 32/20 de 12 de Agosto, declara para os devidos efeitos que ${a.nome}, filho(a) de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, nascido(a) aos ${a.nascimento||'___'}, natural de ${a.naturalidade||'___'} município de ${a.municipio||'___'} província do ${a.provincia||e.provincia||'___'}, portador(a) do B.I. n.º ${a.bi||'___'}, é aluno(a) desta instituição, frequentando a ${a.classe||'___'}, turma ${a.turma||'___'}, nº ${a.numero||'___'}, no ano lectivo ${anoLet}, conforme consta do processo individual n.º ${a.processo||a.matricula||'___'}, tendo obtido as seguintes classificações finais por disciplina:`;
+ch.push(new Paragraph({spacing:{after:200},children:[new TextRun({text:corpo,size:22,font:'Times New Roman'})]}));
+// Tabela: Disciplina, Média Final, Por Extenso
+if(Object.keys(bd).length){
+const hdr=new TableRow({children:['Disciplinas','Média Final','Média por extenso'].map(h=>new TableCell({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:h,bold:true,size:18,font:'Times New Roman'})]})]}))});
+const drs=Object.entries(bd).sort().map(([d,t])=>{
+const mts=Object.values(t).map(n=>n.mt).filter(x=>typeof x==='number');
+const mfd=mts.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';
+return new TableRow({children:[d,String(mfd),typeof mfd==='number'?numExt(mfd):'-'].map((v,i)=>new TableCell({children:[new Paragraph({alignment:i===0?AlignmentType.LEFT:AlignmentType.CENTER,children:[new TextRun({text:v,size:18,font:'Times New Roman',bold:i>=1})]})]}))})});
+ch.push(new Table({rows:[hdr,...drs],width:{size:100,type:WidthType.PERCENTAGE}}))}
+ch.push(new Paragraph({spacing:{before:200},children:[new TextRun({text:'Por ser verdade e me ter sido solicitada, mandei passar a presente declaração que vai por mim assinada e autenticada com carimbo a óleo em uso neste estabelecimento de ensino.',size:22,font:'Times New Roman'})]}))
 }else{
-ch.push(new Paragraph({spacing:{after:200},children:[new TextRun({text:`Aluno: ${a.nome}\nClasse: ${a.classe} | Turma: ${a.turma} | Ano: ${anoLet}`,size:22})]}));
-if(Object.keys(bd).length){const hdr=new TableRow({children:['Disc.','1T MAC','1T PT','1T MT','2T MAC','2T PT','2T MT','3T MAC','3T PT','3T MT','MF'].map(h=>new TableCell({children:[new Paragraph({children:[new TextRun({text:h,bold:true,size:14})]})]}))});const drs=Object.entries(bd).sort().map(([d,t])=>{const t1=t['1º Trimestre']||{},t2=t['2º Trimestre']||{},t3=t['3º Trimestre']||{};const mts=[t1.mt,t2.mt,t3.mt].filter(x=>typeof x==='number');const mf=mts.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';return new TableRow({children:[d,String(t1.mac||'-'),String(t1.pt||'-'),String(t1.mt||'-'),String(t2.mac||'-'),String(t2.pt||'-'),String(t2.mt||'-'),String(t3.mac||'-'),String(t3.pt||'-'),String(t3.mt||'-'),String(mf)].map(v=>new TableCell({children:[new Paragraph({children:[new TextRun({text:v,size:14})]})]}))})});ch.push(new Table({rows:[hdr,...drs],width:{size:100,type:WidthType.PERCENTAGE}}))}}
-const h=new Date();ch.push(new Paragraph({spacing:{before:300},children:[new TextRun({text:`${e.municipio||''}, ${h.getDate()} de ${MESES[h.getMonth()]} de ${h.getFullYear()}`,size:22})]}));
-ch.push(new Paragraph({spacing:{before:300},alignment:AlignmentType.RIGHT,children:[new TextRun({text:'O Director\n\n_______________________\n'+dir.nome,size:22})]}));
-if(qrB64){const qrD=qrB64.split(',')[1];const qrBuf=Uint8Array.from(atob(qrD),c2=>c2.charCodeAt(0));ch.push(new Paragraph({alignment:AlignmentType.RIGHT,children:[new ImageRun({data:qrBuf,transformation:{width:80,height:80}})]}))}
-const doc2=new Document({sections:[{children:ch}]});const blob=await Packer.toBlob(doc2);const url=URL.createObjectURL(blob);const lnk=document.createElement('a');lnk.href=url;lnk.download=`${tt}_${(a.nome||'').replace(/\s/g,'_')}.docx`;document.body.appendChild(lnk);lnk.click();document.body.removeChild(lnk);URL.revokeObjectURL(url);notify('DOCX!','ok')}catch(e){console.error(e);notify('Erro: '+e.message,'er')}}
+// BOLETIM - 1º ou 2º Trimestre - MAC, NPT, MT
+ch.push(new Paragraph({spacing:{after:150},children:[new TextRun({text:`BOLETIM DO ${trimNum.toUpperCase()}\n`,bold:true,size:22,font:'Times New Roman'})]}));
+ch.push(new Paragraph({spacing:{after:200},children:[new TextRun({text:`Aluno(a): ${a.nome}\nClasse: ${a.classe||''} | Turma: ${a.turma||''} | Nº: ${a.numero||''}\nMatrícula: ${a.matricula||''} | Processo: ${a.processo||''} | BI: ${a.bi||''}\nAno Lectivo: ${anoLet}`,size:22,font:'Times New Roman'})]}));
+// Tabela: Disciplina, MAC, NPT, MT
+if(Object.keys(bd).length){
+const hdr=new TableRow({children:['Disciplinas','MAC','NPT','MT'].map(h=>new TableCell({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:h,bold:true,size:18,font:'Times New Roman'})]})]}))});
+const drs=Object.entries(bd).sort().map(([d,t])=>{
+const n=t[trimNum]||{};
+return new TableRow({children:[d,String(n.mac||'-'),String(n.npt||'-'),String(n.mt||'-')].map((v,i)=>new TableCell({children:[new Paragraph({alignment:i===0?AlignmentType.LEFT:AlignmentType.CENTER,children:[new TextRun({text:v,size:18,font:'Times New Roman',bold:i===3})]})]}))})});
+ch.push(new Table({rows:[hdr,...drs],width:{size:100,type:WidthType.PERCENTAGE}}))}}
+// Rodapé
+const localData=`${e.municipio||''}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}`;
+ch.push(new Paragraph({spacing:{before:400},children:[new TextRun({text:localData,size:22,font:'Times New Roman'})]}));
+ch.push(new Paragraph({spacing:{before:300},children:[new TextRun({text:'Conferido por: _______________________                            O Director',size:22,font:'Times New Roman'})]}));
+ch.push(new Paragraph({spacing:{before:200},alignment:AlignmentType.RIGHT,children:[new TextRun({text:'_______________________\n'+dir.nome,bold:true,size:22,font:'Times New Roman'})]}));
+if(qrB64){const qrD=qrB64.split(',')[1];const qrBuf=Uint8Array.from(atob(qrD),c2=>c2.charCodeAt(0));ch.push(new Paragraph({spacing:{before:150},alignment:AlignmentType.RIGHT,children:[new ImageRun({data:qrBuf,transformation:{width:70,height:70}})]}))}
+const doc2=new Document({sections:[{children:ch}]});
+const blob=await Packer.toBlob(doc2);const url=URL.createObjectURL(blob);
+const lnk=document.createElement('a');lnk.href=url;lnk.download=`${tt}_${(a.nome||'').replace(/\s/g,'_')}.docx`;
+document.body.appendChild(lnk);lnk.click();document.body.removeChild(lnk);URL.revokeObjectURL(url);
+notify('DOCX gerado!','ok')}catch(e){console.error(e);notify('Erro: '+e.message,'er')}}
 
-async function gerarPDF(aid){const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();const anoLet=$('docAno').value;const tipo=$('docTipo').value;const tt=tipo==='decl'?'DECLARAÇÃO':'BOLETIM DE NOTAS';let qrImg;try{qrImg=await QRCode.toDataURL(`SIGE|${tt}|${a.nome}|${a.bi}`,{width:100})}catch(ex){qrImg=null}const{jsPDF}=window.jspdf;const pdf=new jsPDF();const hoje=new Date();pdf.setFontSize(11);pdf.text('REPÚBLICA DE ANGOLA',105,15,{align:'center'});pdf.text('MINISTÉRIO DA EDUCAÇÃO',105,21,{align:'center'});pdf.setFontSize(14);pdf.setTextColor(153,0,0);pdf.text(tt,105,33,{align:'center'});pdf.setTextColor(0);pdf.setFontSize(9);let y=44;const ns=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('anoLetivo','==',anoLet).get();const bd={};ns.forEach(d=>{const n=d.data();if(!bd[n.disciplina])bd[n.disciplina]={};bd[n.disciplina][n.trimestre]=n});
-if(tipo==='decl'){pdf.text(`${dir.nome}, Director, declara que ${a.nome}, filho(a) de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, portador(a) do BI nº ${a.bi||'___'}, é aluno(a) da ${a.classe||''}, turma ${a.turma||''}, ano ${anoLet}.`,15,y,{maxWidth:180});y+=20;const body=Object.entries(bd).sort().map(([d,t])=>{const mts=Object.values(t).map(n=>n.mt).filter(x=>typeof x==='number');const mf=mts.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';return[d,String(mf),typeof mf==='number'?numExt(mf):'-']});if(body.length){pdf.autoTable({head:[['Disciplina','Média Final','Por extenso']],body,startY:y,theme:'grid',headStyles:{fillColor:[26,35,126]}});y=pdf.lastAutoTable.finalY+5}
-}else{pdf.text(`Aluno: ${a.nome} | Classe: ${a.classe} | Turma: ${a.turma} | Ano: ${anoLet}`,15,y);y+=8;const body=Object.entries(bd).sort().map(([d,t])=>{const t1=t['1º Trimestre']||{},t2=t['2º Trimestre']||{},t3=t['3º Trimestre']||{};const mts=[t1.mt,t2.mt,t3.mt].filter(x=>typeof x==='number');const mf=mts.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';return[d,t1.mac||'-',t1.pt||'-',t1.mt||'-',t2.mac||'-',t2.pt||'-',t2.mt||'-',t3.mac||'-',t3.pt||'-',t3.mt||'-',String(mf)]});if(body.length){pdf.autoTable({head:[['Disc','1T MAC','1T PT','1T MT','2T MAC','2T PT','2T MT','3T MAC','3T PT','3T MT','MF']],body,startY:y,theme:'grid',headStyles:{fillColor:[26,35,126],fontSize:6},styles:{fontSize:6}});y=pdf.lastAutoTable.finalY+5}}
-pdf.text(`${e.municipio||''}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}`,15,y);y+=12;pdf.text('O Director: '+dir.nome,15,y);if(qrImg)pdf.addImage(qrImg,'PNG',165,y-10,25,25);pdf.save(`${tt}_${(a.nome||'').replace(/\s/g,'_')}.pdf`);notify('PDF!','ok')}
+async function gerarPDF(aid){
+const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();
+const anoLet=$('docAno').value;const tipo=$('docTipo').value;
+const tt=tipo==='decl'?'DECLARAÇÃO':'BOLETIM DE NOTAS';
+const trimNum=tipo==='bolet1'?'1º Trimestre':tipo==='bolet2'?'2º Trimestre':'';
+let qrImg;try{qrImg=await QRCode.toDataURL(`SIGE|${tt}|${a.nome}|${a.bi||''}|${anoLet}`,{width:100})}catch(ex){qrImg=null}
+const{jsPDF}=window.jspdf;const pdf=new jsPDF();const hoje=new Date();
+// Brasão simples (círculo dourado)
+pdf.setFillColor(204,0,0);pdf.circle(105,18,6,'F');
+pdf.setFillColor(255,204,0);pdf.circle(105,18,4,'F');
+pdf.setFont('times','bold');pdf.setFontSize(12);
+pdf.text('REPÚBLICA DE ANGOLA',105,32,{align:'center'});
+pdf.text('MINISTÉRIO DA EDUCAÇÃO',105,38,{align:'center'});
+pdf.setFontSize(16);pdf.setTextColor(153,0,0);
+pdf.text(tt,105,52,{align:'center'});pdf.setTextColor(0);
+pdf.setFont('times','normal');pdf.setFontSize(10);
+let y=62;
+const ns=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).where('anoLetivo','==',anoLet).get();
+const bd={};ns.forEach(d=>{const n=d.data();if(!bd[n.disciplina])bd[n.disciplina]={};bd[n.disciplina][n.trimestre]=n});
+if(tipo==='decl'){
+const corpo=`${dir.nome}, Director do Complexo Escolar N.º ${e.numero||'___'}, denominado ${e.denominacao||e.nome}, criado sob o Decreto Executivo n.º ${e.decreto||'___'}, ao abrigo do disposto na alínea e) do artigo 109.º da Lei n.º 32/20 de 12 de Agosto, declara que ${a.nome}, filho(a) de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, nascido(a) aos ${a.nascimento||'___'}, natural de ${a.naturalidade||'___'} província do ${a.provincia||'___'}, portador(a) do B.I. n.º ${a.bi||'___'}, é aluno(a) da ${a.classe||'___'}, turma ${a.turma||'___'}, no ano lectivo ${anoLet}, com as seguintes médias finais:`;
+pdf.text(corpo,15,y,{maxWidth:180});y+=42;
+const body=Object.entries(bd).sort().map(([d,t])=>{const mts=Object.values(t).map(n=>n.mt).filter(x=>typeof x==='number');const mfd=mts.length?Math.round(mts.reduce((a2,b)=>a2+b,0)/mts.length):'-';return[d,String(mfd),typeof mfd==='number'?numExt(mfd):'-']});
+if(body.length){pdf.autoTable({head:[['Disciplina','Média Final','Média por extenso']],body,startY:y,theme:'grid',headStyles:{fillColor:[26,35,126]},styles:{font:'times',fontSize:9}});y=pdf.lastAutoTable.finalY+5}
+}else{
+pdf.setFont('times','bold');pdf.text(`BOLETIM DO ${trimNum.toUpperCase()}`,15,y);y+=6;
+pdf.setFont('times','normal');pdf.text(`Aluno: ${a.nome} | Classe: ${a.classe||''} | Turma: ${a.turma||''} | Nº: ${a.numero||''}`,15,y);y+=5;
+pdf.text(`Matrícula: ${a.matricula||''} | BI: ${a.bi||''} | Ano: ${anoLet}`,15,y);y+=8;
+const body=Object.entries(bd).sort().map(([d,t])=>{const n=t[trimNum]||{};return[d,String(n.mac||'-'),String(n.npt||'-'),String(n.mt||'-')]});
+if(body.length){pdf.autoTable({head:[['Disciplina','MAC','NPT','MT']],body,startY:y,theme:'grid',headStyles:{fillColor:[26,35,126]},styles:{font:'times',fontSize:9}});y=pdf.lastAutoTable.finalY+5}}
+pdf.setFont('times','normal');pdf.setFontSize(10);
+pdf.text(`${e.municipio||''}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}`,15,y);y+=15;
+pdf.text('Conferido por: _______________________',15,y);
+pdf.text('O Director',155,y);y+=12;
+pdf.text('_______________________',135,y);y+=5;
+pdf.setFont('times','bold');pdf.text(dir.nome,145,y);
+if(qrImg)pdf.addImage(qrImg,'PNG',170,y+3,22,22);
+pdf.save(`${tt}_${(a.nome||'').replace(/\s/g,'_')}.pdf`);notify('PDF gerado!','ok')}
 
 // ===== CERTIFICADOS (6ª, 9ª, 12ª) =====
-async function pgCerts(){const cs=await db.collection('escolas').doc(CSI).collection('classes').get();const classesCert=cs.docs.filter(d=>classeCertificado(d.data().nome));const anos=await db.collection('escolas').doc(CSI).collection('anosLetivos').get();$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>🎓 Certificados (6ª, 9ª, 12ª)</h3></div><div class="card-b"><p style="font-size:.75em;color:var(--txl);margin-bottom:5px">Apenas alunos das classes 6ª, 9ª e 12ª. Notas das 3 últimas classes.</p><div class="fp"><select id="certAno">${anos.docs.map(d=>`<option value="${d.data().nome}">${d.data().nome}</option>`).join('')}</select><select id="certCl"><option value="">Classe</option>${classesCert.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><button class="btn btn-p" onclick="ldCertAl()">📋</button></div><div id="certDiv"></div></div></div>`}
-async function ldCertAl(){const cl=$('certCl').value;if(!cl||!classeCertificado(cl)){notify('Selecione 6ª, 9ª ou 12ª!','er');return}const s=await db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl).get();const sorted=[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const a=d.data();r+=`<tr><td>${a.nome}</td><td>${a.classe}</td><td><button class="btn btn-sm btn-p" onclick="gerarCertDocx('${d.id}')">DOCX</button> <button class="btn btn-sm btn-s" onclick="gerarCertPDF('${d.id}')">PDF</button></td></tr>`});$('certDiv').innerHTML=`<table><tr><th>Nome</th><th>Classe</th><th></th></tr>${r||'<tr><td colspan="3">Nenhum</td></tr>'}</table>`}
+async function pgCerts(){
+const cs=await db.collection('escolas').doc(CSI).collection('classes').get();
+const classesCert=cs.docs.filter(d=>classeCertificado(d.data().nome));
+const anos=await db.collection('escolas').doc(CSI).collection('anosLetivos').get();
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>🎓 Certificados (6ª, 9ª, 12ª)</h3></div><div class="card-b">
+<p style="font-size:.72em;color:var(--txl);margin-bottom:5px">Certificados apenas para 6ª (médias 1ª-6ª), 9ª (7ª-9ª) e 12ª (10ª-12ª).</p>
+<div class="fp">
+<select id="certAno">${anos.docs.map(d=>`<option value="${d.data().nome}">${d.data().nome}</option>`).join('')}</select>
+<select id="certCl"><option value="">Classe</option>${classesCert.map(d=>`<option>${d.data().nome}</option>`).join('')}</select>
+<button class="btn btn-p" onclick="ldCertAl()">📋</button>
+</div><div id="certDiv"></div></div></div>`}
 
-async function getNotasCert(aid,classeAtual){let classesAnt=[];if(classeAtual.includes('6ª'))classesAnt=['4ª Classe','5ª Classe','6ª Classe'];else if(classeAtual.includes('9ª'))classesAnt=['7ª Classe','8ª Classe','9ª Classe'];else if(classeAtual.includes('12ª'))classesAnt=['10ª Classe','11ª Classe','12ª Classe'];const notasSnap=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).get();const byDisc={};notasSnap.forEach(d=>{const n=d.data();if(!classesAnt.includes(n.classe))return;if(!byDisc[n.disciplina])byDisc[n.disciplina]={};if(!byDisc[n.disciplina][n.classe])byDisc[n.disciplina][n.classe]=[];byDisc[n.disciplina][n.classe].push(n.mt||0)});const histSnap=await db.collection('escolas').doc(CSI).collection('histNotas').where('alunoId','==',aid).get();histSnap.forEach(d=>{const h=d.data();if(!classesAnt.includes(h.classe))return;if(!byDisc[h.disciplina])byDisc[h.disciplina]={};if(!byDisc[h.disciplina][h.classe])byDisc[h.disciplina][h.classe]=[h.mediaFinal]});return{classes:classesAnt,byDisc}}
+async function ldCertAl(){
+const cl=$('certCl').value;
+if(!cl||!classeCertificado(cl)){notify('Selecione 6ª, 9ª ou 12ª!','er');return}
+const s=await db.collection('escolas').doc(CSI).collection('alunos').where('classe','==',cl).get();
+const sorted=[...s.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));
+let r='';sorted.forEach(d=>{const a=d.data();r+=`<tr><td>${a.nome}</td><td>${a.classe}</td><td><button class="btn btn-sm btn-p" onclick="gerarCertDocx('${d.id}')">📄 DOCX</button> <button class="btn btn-sm btn-s" onclick="gerarCertPDF('${d.id}')">📄 PDF</button></td></tr>`});
+$('certDiv').innerHTML=`<table><tr><th>Nome</th><th>Classe</th><th></th></tr>${r||'<tr><td colspan="3">Nenhum</td></tr>'}</table>`}
 
-async function gerarCertDocx(aid){const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();const anoLet=$('certAno').value;const{classes,byDisc}=await getNotasCert(aid,a.classe);let qrB64;try{qrB64=await QRCode.toDataURL(`SIGE|CERT|${a.nome}|${a.bi}|${anoLet}`,{width:120})}catch(ex){qrB64=null}
-try{const{Document,Packer,Paragraph,TextRun,AlignmentType,Table,TableRow,TableCell,WidthType,ImageRun}=docx;const ch=[];
-ch.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'REPÚBLICA DE ANGOLA',bold:true,size:22})]}));
-ch.push(new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:'MINISTÉRIO DA EDUCAÇÃO',bold:true,size:22})]}));
-ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:300},children:[new TextRun({text:'C E R T I F I C A D O',bold:true,size:34,color:'990000'})]}));
-ch.push(new Paragraph({spacing:{after:200},children:[new TextRun({text:`${dir.nome}, Director do Complexo Escolar N.º ${e.numero||'___'}, denominado ${e.denominacao||e.nome}, certifica que `,size:22}),new TextRun({text:a.nome,bold:true,underline:{},size:22}),new TextRun({text:`, filho de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, nascido aos ${a.nascimento||'___'}, natural de ${a.naturalidade||'___'}, portador do B.I. nº ${a.bi||'___'}, concluiu no ano lectivo ${anoLet}.`,size:22})]}));
-const hCells=['Disciplinas'];classes.forEach(c=>hCells.push(c));hCells.push('MF','Por extenso');
-const hRow=new TableRow({children:hCells.map(h=>new TableCell({children:[new Paragraph({children:[new TextRun({text:h,bold:true,size:16})]})]}))});
-const dRows=[];for(const[disc,clData]of Object.entries(byDisc).sort()){const cells=[disc];const avgs=[];classes.forEach(c=>{const ns=clData[c];if(ns?.length){const avg=Math.round(ns.reduce((a2,b)=>a2+b,0)/ns.length);cells.push(String(avg));avgs.push(avg)}else cells.push('-')});const mf=avgs.length?Math.round(avgs.reduce((a2,b)=>a2+b,0)/avgs.length):'-';cells.push(String(mf));cells.push(typeof mf==='number'?numExt(mf):'-');dRows.push(new TableRow({children:cells.map(v=>new TableCell({children:[new Paragraph({children:[new TextRun({text:v,size:16})]})]}))}))}
+// Buscar notas das classes anteriores (sistema + histórico)
+async function getNotasCert(aid,classeAtual){
+let classesAnt=[];
+if(classeAtual.includes('6ª'))classesAnt=['1ª Classe','2ª Classe','3ª Classe','4ª Classe','5ª Classe','6ª Classe'];
+else if(classeAtual.includes('9ª'))classesAnt=['7ª Classe','8ª Classe','9ª Classe'];
+else if(classeAtual.includes('12ª'))classesAnt=['10ª Classe','11ª Classe','12ª Classe'];
+// Notas do sistema (classes atuais)
+const notasSnap=await db.collection('escolas').doc(CSI).collection('notas').where('alunoId','==',aid).get();
+const byDisc={};
+notasSnap.forEach(d=>{const n=d.data();if(!classesAnt.includes(n.classe))return;if(!byDisc[n.disciplina])byDisc[n.disciplina]={};if(!byDisc[n.disciplina][n.classe])byDisc[n.disciplina][n.classe]=[];byDisc[n.disciplina][n.classe].push(n.mt||0)});
+// Notas históricas (manuais)
+const histSnap=await db.collection('escolas').doc(CSI).collection('histNotas').where('alunoId','==',aid).get();
+histSnap.forEach(d=>{const h=d.data();if(!classesAnt.includes(h.classe))return;if(!byDisc[h.disciplina])byDisc[h.disciplina]={};if(!byDisc[h.disciplina][h.classe])byDisc[h.disciplina][h.classe]=[h.mediaFinal]});
+return{classes:classesAnt,byDisc}}
+
+async function gerarCertDocx(aid){
+const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();
+const anoLet=$('certAno').value;
+const{classes,byDisc}=await getNotasCert(aid,a.classe);
+const qrText=`SIGE|CERTIFICADO|${e.nome}|${a.nome}|${a.bi||''}|${anoLet}|${new Date().toISOString()}`;
+let qrB64;try{qrB64=await QRCode.toDataURL(qrText,{width:120})}catch(ex){qrB64=null}
+try{
+const{Document,Packer,Paragraph,TextRun,AlignmentType,Table,TableRow,TableCell,WidthType,ImageRun}=docx;
+const ch=[];
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:60},children:[new TextRun({text:'★',bold:true,size:36,color:'CC0000'})]}));
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:40},children:[new TextRun({text:'REPÚBLICA DE ANGOLA',bold:true,size:24,font:'Times New Roman'})]}));
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:200},children:[new TextRun({text:'MINISTÉRIO DA EDUCAÇÃO',bold:true,size:24,font:'Times New Roman'})]}));
+ch.push(new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:300},children:[new TextRun({text:'CERTIFICADO',bold:true,size:36,color:'990000',font:'Times New Roman'})]}));
+// Calcular média final
+let tMF=0,cMF=0;
+for(const[disc,clData]of Object.entries(byDisc)){const avgs=[];classes.forEach(c=>{const ns=clData[c];if(ns?.length){const avg=Math.round(ns.reduce((a2,b)=>a2+b,0)/ns.length);avgs.push(avg)}});if(avgs.length){const mf=Math.round(avgs.reduce((a2,b)=>a2+b,0)/avgs.length);tMF+=mf;cMF++}}
+const mediaFinal=cMF?Math.round(tMF/cMF):0;
+// Corpo do certificado (texto completo conforme modelo)
+ch.push(new Paragraph({spacing:{after:200},children:[
+new TextRun({text:`${dir.nome}, `,bold:true,size:22,font:'Times New Roman'}),
+new TextRun({text:`Director do Complexo Escolar N.º ${e.numero||'___'}, denominado ${e.denominacao||e.nome}, criado sob o Decreto Executivo n.º ${e.decreto||'___'}, ao abrigo do disposto na alínea e) do artigo 109.º da Lei n.º 32/20 de 12 de Agosto, certifica que `,size:22,font:'Times New Roman'}),
+new TextRun({text:a.nome,bold:true,underline:{},size:22,font:'Times New Roman'}),
+new TextRun({text:`, filho de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, nascido aos ${a.nascimento||'___'}, natural de ${a.naturalidade||'___'} município de ${a.municipio||'___'} província do ${a.provincia||e.provincia||'___'}, portador do B.I. n.º ${a.bi||'___'}, passado pelo arquivo de identificação de ${a.arquivo||'___'} aos ${a.biData||'___'}, concluiu no ano lectivo ${anoLet} o ${e.nivel||'___'}, na área de ${e.areaFormacao||'___'}, conforme consta do processo individual n.º ${a.processo||a.matricula||'___'}, com a média final de `,size:22,font:'Times New Roman'}),
+new TextRun({text:`${mediaFinal} valores`,bold:true,size:22,font:'Times New Roman'}),
+new TextRun({text:`, obtida pelas seguintes classificações por disciplina:`,size:22,font:'Times New Roman'})
+]}));
+// Tabela de notas
+const hCells=['Disciplinas'];classes.forEach(c=>hCells.push(c.substring(0,4)));hCells.push('Média Final','Média por extenso');
+const hRow=new TableRow({children:hCells.map(h=>new TableCell({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:h,bold:true,size:16,font:'Times New Roman'})]})]}))});
+const dRows=[];
+for(const[disc,clData]of Object.entries(byDisc).sort()){
+const cells=[disc];const avgs=[];
+classes.forEach(c=>{const ns=clData[c];if(ns?.length){const avg=Math.round(ns.reduce((a2,b)=>a2+b,0)/ns.length);cells.push(String(avg));avgs.push(avg)}else cells.push('-')});
+const mf=avgs.length?Math.round(avgs.reduce((a2,b)=>a2+b,0)/avgs.length):'-';
+cells.push(String(mf));cells.push(typeof mf==='number'?numExt(mf):'-');
+dRows.push(new TableRow({children:cells.map((v,i)=>new TableCell({children:[new Paragraph({alignment:i===0?AlignmentType.LEFT:AlignmentType.CENTER,children:[new TextRun({text:v,size:16,font:'Times New Roman',bold:i>=cells.length-2})]})]}))}))}
 if(dRows.length)ch.push(new Table({rows:[hRow,...dRows],width:{size:100,type:WidthType.PERCENTAGE}}));
-const h=new Date();ch.push(new Paragraph({spacing:{before:300},children:[new TextRun({text:`${e.municipio||''}, ${h.getDate()} de ${MESES[h.getMonth()]} de ${h.getFullYear()}`,size:22})]}));
-ch.push(new Paragraph({spacing:{before:300},alignment:AlignmentType.RIGHT,children:[new TextRun({text:'O Director\n\n_______________________\n'+dir.nome,size:22})]}));
-if(qrB64){const qrD=qrB64.split(',')[1];const qrBuf=Uint8Array.from(atob(qrD),c2=>c2.charCodeAt(0));ch.push(new Paragraph({alignment:AlignmentType.RIGHT,children:[new ImageRun({data:qrBuf,transformation:{width:80,height:80}})]}))}
-const doc2=new Document({sections:[{children:ch}]});const blob=await Packer.toBlob(doc2);const url=URL.createObjectURL(blob);const lnk=document.createElement('a');lnk.href=url;lnk.download=`Certificado_${(a.nome||'').replace(/\s/g,'_')}.docx`;document.body.appendChild(lnk);lnk.click();document.body.removeChild(lnk);URL.revokeObjectURL(url);notify('Certificado DOCX!','ok')}catch(err){console.error(err);notify('Erro: '+err.message,'er')}}
+// Texto legal
+ch.push(new Paragraph({spacing:{before:200},children:[new TextRun({text:`Para efeitos legais, é passado o presente CERTIFICADO, que consta no livro de registo n.º ${a.processo||a.matricula||'___'}, folha FB-${anoLet}, assinado por mim e autenticado com carimbo a óleo / selo branco em uso neste estabelecimento de ensino.`,size:20,font:'Times New Roman'})]}));
+const hoje=new Date();
+ch.push(new Paragraph({spacing:{before:300},children:[new TextRun({text:`${e.municipio||e.provincia||''}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}`,size:22,font:'Times New Roman'})]}));
+ch.push(new Paragraph({spacing:{before:300},children:[new TextRun({text:'Conferido por: _______________________                            O Director',size:22,font:'Times New Roman'})]}));
+ch.push(new Paragraph({spacing:{before:200},alignment:AlignmentType.RIGHT,children:[new TextRun({text:'_______________________\n'+dir.nome,bold:true,size:22,font:'Times New Roman'})]}));
+if(qrB64){const qrD=qrB64.split(',')[1];const qrBuf=Uint8Array.from(atob(qrD),c2=>c2.charCodeAt(0));ch.push(new Paragraph({spacing:{before:150},alignment:AlignmentType.RIGHT,children:[new ImageRun({data:qrBuf,transformation:{width:70,height:70}})]}))}
+const doc2=new Document({sections:[{children:ch}]});
+const blob=await Packer.toBlob(doc2);const url=URL.createObjectURL(blob);
+const lnk=document.createElement('a');lnk.href=url;lnk.download=`Certificado_${(a.nome||'').replace(/\s/g,'_')}.docx`;
+document.body.appendChild(lnk);lnk.click();document.body.removeChild(lnk);URL.revokeObjectURL(url);
+notify('Certificado DOCX!','ok')}catch(err){console.error(err);notify('Erro: '+err.message,'er')}}
 
-async function gerarCertPDF(aid){const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();const anoLet=$('certAno').value;const{classes,byDisc}=await getNotasCert(aid,a.classe);let qrImg;try{qrImg=await QRCode.toDataURL(`SIGE|CERT|${a.nome}|${a.bi}`,{width:100})}catch(ex){qrImg=null}const{jsPDF}=window.jspdf;const pdf=new jsPDF();const hoje=new Date();pdf.setFontSize(11);pdf.text('REPÚBLICA DE ANGOLA',105,15,{align:'center'});pdf.text('MINISTÉRIO DA EDUCAÇÃO',105,21,{align:'center'});pdf.setFontSize(15);pdf.setTextColor(153,0,0);pdf.text('C E R T I F I C A D O',105,34,{align:'center'});pdf.setTextColor(0);pdf.setFontSize(9);pdf.text(`${dir.nome}, Director, certifica que ${a.nome}, filho de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, BI ${a.bi||'___'}, concluiu no ano lectivo ${anoLet}.`,15,45,{maxWidth:180});let y=70;const head=[['Disciplinas',...classes,'MF','Por extenso']];const body=Object.entries(byDisc).sort().map(([d,clData])=>{const row=[d];const avgs=[];classes.forEach(c=>{const ns=clData[c];if(ns?.length){const avg=Math.round(ns.reduce((a2,b)=>a2+b,0)/ns.length);row.push(String(avg));avgs.push(avg)}else row.push('-')});const mf=avgs.length?Math.round(avgs.reduce((a2,b)=>a2+b,0)/avgs.length):'-';row.push(String(mf));row.push(typeof mf==='number'?numExt(mf):'-');return row});if(body.length){pdf.autoTable({head,body,startY:y,theme:'grid',headStyles:{fillColor:[26,35,126],fontSize:7},styles:{fontSize:7}});y=pdf.lastAutoTable.finalY+8}pdf.text(`${e.municipio||''}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}`,15,y);y+=12;pdf.text('O Director: '+dir.nome,15,y);if(qrImg)pdf.addImage(qrImg,'PNG',165,y-10,25,25);pdf.save(`Certificado_${(a.nome||'').replace(/\s/g,'_')}.pdf`);notify('Certificado PDF!','ok')}
+async function gerarCertPDF(aid){
+const aDoc=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const a=aDoc.data();const e=CS;const dir=await getDir();
+const anoLet=$('certAno').value;
+const{classes,byDisc}=await getNotasCert(aid,a.classe);
+let qrImg;try{qrImg=await QRCode.toDataURL(`SIGE|CERT|${a.nome}|${a.bi||''}|${anoLet}`,{width:100})}catch(ex){qrImg=null}
+const{jsPDF}=window.jspdf;const pdf=new jsPDF();const hoje=new Date();
+// Brasão simples
+pdf.setFillColor(204,0,0);pdf.circle(105,18,6,'F');pdf.setFillColor(255,204,0);pdf.circle(105,18,4,'F');
+pdf.setFont('times','bold');pdf.setFontSize(12);
+pdf.text('REPÚBLICA DE ANGOLA',105,32,{align:'center'});
+pdf.text('MINISTÉRIO DA EDUCAÇÃO',105,38,{align:'center'});
+pdf.setFontSize(18);pdf.setTextColor(153,0,0);pdf.text('CERTIFICADO',105,52,{align:'center'});pdf.setTextColor(0);
+pdf.setFont('times','normal');pdf.setFontSize(9);
+// Calcular média final
+let tMF=0,cMF=0;
+for(const[disc,clData]of Object.entries(byDisc)){const avgs=[];classes.forEach(c=>{const ns=clData[c];if(ns?.length){const avg=Math.round(ns.reduce((a2,b)=>a2+b,0)/ns.length);avgs.push(avg)}});if(avgs.length){const mf=Math.round(avgs.reduce((a2,b)=>a2+b,0)/avgs.length);tMF+=mf;cMF++}}
+const mediaFinal=cMF?Math.round(tMF/cMF):0;
+const corpo=`${dir.nome}, Director do Complexo Escolar N.º ${e.numero||'___'}, denominado ${e.denominacao||e.nome}, criado sob o Decreto Executivo n.º ${e.decreto||'___'}, ao abrigo do disposto na alínea e) do artigo 109.º da Lei n.º 32/20 de 12 de Agosto, certifica que ${a.nome}, filho de ${a.nomePai||'___'} e de ${a.nomeMae||'___'}, nascido aos ${a.nascimento||'___'}, natural de ${a.naturalidade||'___'} município de ${a.municipio||'___'} província do ${a.provincia||'___'}, portador do B.I. n.º ${a.bi||'___'}, passado pelo arquivo de identificação de ${a.arquivo||'___'} aos ${a.biData||'___'}, concluiu no ano lectivo ${anoLet} o ${e.nivel||'___'}, na área de ${e.areaFormacao||'___'}, conforme consta do processo individual n.º ${a.processo||'___'}, com a média final de ${mediaFinal} valores, obtida pelas seguintes classificações por disciplina:`;
+pdf.text(corpo,15,62,{maxWidth:180});
+let y=110;
+// Tabela
+const head=[['Disciplinas',...classes.map(c=>c.substring(0,5)),'MF','Por extenso']];
+const body=Object.entries(byDisc).sort().map(([d,clData])=>{const row=[d];const avgs=[];classes.forEach(c=>{const ns=clData[c];if(ns?.length){const avg=Math.round(ns.reduce((a2,b)=>a2+b,0)/ns.length);row.push(String(avg));avgs.push(avg)}else row.push('-')});const mf=avgs.length?Math.round(avgs.reduce((a2,b)=>a2+b,0)/avgs.length):'-';row.push(String(mf));row.push(typeof mf==='number'?numExt(mf):'-');return row});
+if(body.length){pdf.autoTable({head,body,startY:y,theme:'grid',headStyles:{fillColor:[26,35,126],fontSize:7},styles:{font:'times',fontSize:7}});y=pdf.lastAutoTable.finalY+6}
+pdf.setFontSize(8);
+pdf.text(`Para efeitos legais, é passado o presente CERTIFICADO, que consta no livro de registo n.º ${a.processo||'___'}, folha FB-${anoLet}, assinado e autenticado com carimbo.`,15,y,{maxWidth:180});y+=15;
+pdf.setFontSize(10);
+pdf.text(`${e.municipio||''}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}`,15,y);y+=15;
+pdf.text('Conferido por: _______________________',15,y);pdf.text('O Director',155,y);y+=12;
+pdf.text('_______________________',135,y);y+=5;
+pdf.setFont('times','bold');pdf.text(dir.nome,145,y);
+if(qrImg)pdf.addImage(qrImg,'PNG',170,y+3,22,22);
+pdf.save(`Certificado_${(a.nome||'').replace(/\s/g,'_')}.pdf`);notify('Certificado PDF!','ok')}
 
-// ===== HISTÓRICO DE NOTAS =====
-async function pgHistNotas(){$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📚 Histórico de Notas para Certificados</h3></div><div class="card-b"><p style="font-size:.75em;color:var(--txl);margin-bottom:5px">Complete notas das classes anteriores que serão usadas nos certificados.</p><div class="fp"><input type="text" id="hNm" placeholder="🔍 Nome..." style="flex:1;max-width:250px"><button class="btn btn-p" onclick="buscarAlunoHist()">🔍</button></div><div id="histDiv"></div></div></div>`}
-async function buscarAlunoHist(){const nm=$('hNm').value.trim().toLowerCase();if(!nm||nm.length<3){notify('3 letras+','er');return}const als=await db.collection('escolas').doc(CSI).collection('alunos').get();const m=[];als.forEach(d=>{const a=d.data();if(a.nome?.toLowerCase().includes(nm))m.push({id:d.id,...a})});if(!m.length){$('histDiv').innerHTML='<p>Nenhum encontrado</p>';return}let r='';m.sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')).forEach(a=>{r+=`<tr><td>${a.nome}</td><td>${a.classe||''}</td><td><button class="btn btn-sm btn-inf" onclick="editHistNotas('${a.id}','${a.nome.replace(/'/g,"\\'")}')">📝</button></td></tr>`});$('histDiv').innerHTML=`<table><tr><th>Nome</th><th>Classe</th><th></th></tr>${r}</table>`}
-async function editHistNotas(aid,nome){const histSnap=await db.collection('escolas').doc(CSI).collection('histNotas').where('alunoId','==',aid).get();const hist={};histSnap.forEach(d=>{const h=d.data();if(!hist[h.classe])hist[h.classe]={};hist[h.classe][h.disciplina]=h});const discSnap=await db.collection('escolas').doc(CSI).collection('disciplinas').get();const disciplinas=[...discSnap.docs].map(d=>d.data().nome).sort();const aluno=await db.collection('escolas').doc(CSI).collection('alunos').doc(aid).get();const classeAtual=aluno.data().classe||'';let classesAnt=[];if(classeAtual.includes('6ª'))classesAnt=['4ª Classe','5ª Classe'];else if(classeAtual.includes('9ª'))classesAnt=['7ª Classe','8ª Classe'];else if(classeAtual.includes('12ª'))classesAnt=['10ª Classe','11ª Classe'];else classesAnt=[classeAtual];let f='';classesAnt.forEach(cl=>{f+=`<h4 style="margin:6px 0;font-size:.8em;color:var(--p)">${cl}</h4><table><tr><th>Disciplina</th><th>Média Final</th></tr>`;disciplinas.forEach(disc=>{const val=hist[cl]?.[disc]?.mediaFinal||'';f+=`<tr><td>${disc}</td><td><input type="number" min="0" max="${notaMax(cl)}" value="${val}" class="hni" data-cl="${cl}" data-disc="${disc}" style="width:50px"></td></tr>`});f+=`</table>`});$('mB').className='modal lg';$('mB').innerHTML=`<div class="mh"><h3>📚 ${nome}</h3><button class="mx" onclick="cM()">×</button></div><div class="mb">${f}</div><div class="mf"><button class="btn btn-p" onclick="salvarHistNotas('${aid}')">💾</button></div>`;oM()}
-async function salvarHistNotas(aid){const inps=document.querySelectorAll('.hni');for(const inp of inps){const cl=inp.dataset.cl;const disc=inp.dataset.disc;const val=parseFloat(inp.value)||0;if(val<=0)continue;const ex=await db.collection('escolas').doc(CSI).collection('histNotas').where('alunoId','==',aid).where('classe','==',cl).where('disciplina','==',disc).get();if(!ex.empty)await ex.docs[0].ref.update({mediaFinal:val});else await db.collection('escolas').doc(CSI).collection('histNotas').add({alunoId:aid,classe:cl,disciplina:disc,mediaFinal:val,criadoEm:ts()})}notify('Salvo!','ok');cM()}
+// ===== CONFIG FINANCEIRA (com título, valor, descrição, classes) =====
+async function pgCfgFin(){
+const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();
+const data=cfg.exists?cfg.data():{ativo:false,emolumentos:[]};
+let emR='';(data.emolumentos||[]).forEach((em,i)=>{
+emR+=`<tr><td>${em.titulo||em.nome||''}</td><td>${(em.valor||0).toLocaleString()} Kz</td><td>${em.periodicidade||''}</td><td style="font-size:.65em">${em.classes?.join(', ')||'Todas'}</td><td><button class="btn btn-sm btn-s" onclick="remEmol(${i})">🗑️</button></td></tr>`});
+const cs=await db.collection('escolas').doc(CSI).collection('classes').get();
+const classesOpts=cs.docs.map(d=>`<label style="display:block;font-size:.78em;margin:2px 0"><input type="checkbox" class="cbCl" value="${d.data().nome}"> ${d.data().nome}</label>`).join('');
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>⚙️ Config. Financeira</h3></div><div class="card-b">
+<div class="btn-group"><button class="btn ${data.ativo?'btn-ok':'btn-out'}" onclick="togFin(true)">✅ Ativado</button><button class="btn ${!data.ativo?'btn-s':'btn-out'}" onclick="togFin(false)">❌ Desativado</button></div>
+<div class="divider"></div>
+<h4 style="font-size:.8em;margin-bottom:5px">💰 Emolumentos Configurados</h4>
+<table><tr><th>Título</th><th>Valor</th><th>Period.</th><th>Classes</th><th></th></tr>${emR||'<tr><td colspan="5">Nenhum</td></tr>'}</table>
+<div class="divider"></div>
+<h4 style="font-size:.8em;margin-bottom:5px">➕ Adicionar Novo Emolumento</h4>
+<div class="fr"><div class="fg"><label>Título do Pagamento <span class="req">*</span></label><input id="emN" placeholder="Ex: Propina Janeiro"></div><div class="fg"><label>Valor (Kz) <span class="req">*</span></label><input type="number" id="emV"></div></div>
+<div class="fg"><label>Descrição</label><textarea id="emDesc" rows="2" placeholder="Detalhes do pagamento..."></textarea></div>
+<div class="fr"><div class="fg"><label>Periodicidade</label><select id="emP"><option>Mensal</option><option>Trimestral</option><option>Anual</option><option>Único (Matrícula)</option></select></div><div class="fg"><label>Aplicar a</label><select id="emCl"><option value="todas">Todas as Classes</option><option value="especifica">Classes Específicas</option></select></div></div>
+<div id="emClSel" class="hidden" style="background:#fafbfc;padding:8px;border-radius:var(--r);max-height:150px;overflow-y:auto;margin-bottom:8px">
+<p style="font-size:.7em;color:var(--txl);margin-bottom:4px">Marque as classes:</p>${classesOpts}
+</div>
+<button class="btn btn-p" onclick="addEmol()">➕ Adicionar</button>
+</div></div>`;
+$('emCl').addEventListener('change',e=>{$('emClSel').classList.toggle('hidden',e.target.value!=='especifica')})}
 
-// ===== FINANCEIRO =====
-async function pgCfgFin(){const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();const data=cfg.exists?cfg.data():{ativo:false,emolumentos:[]};let emR='';(data.emolumentos||[]).forEach((em,i)=>{emR+=`<tr><td>${em.nome}</td><td>${(em.valor||0).toLocaleString()} Kz</td><td>${em.periodicidade||''}</td><td><button class="btn btn-sm btn-s" onclick="remEmol(${i})">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>⚙️ Config. Financeira</h3></div><div class="card-b"><div class="btn-group"><button class="btn ${data.ativo?'btn-ok':'btn-out'}" onclick="togFin(true)">✅ Ativado</button><button class="btn ${!data.ativo?'btn-s':'btn-out'}" onclick="togFin(false)">❌ Desativado</button></div><div class="divider"></div><table><tr><th>Descrição</th><th>Valor</th><th>Period.</th><th></th></tr>${emR||'<tr><td colspan="4">Nenhum</td></tr>'}</table><div class="fr mt-2"><div class="fg"><label>Descrição</label><input id="emN"></div><div class="fg"><label>Valor</label><input type="number" id="emV"></div></div><div class="fg"><select id="emP"><option>Mensal</option><option>Trimestral</option><option>Anual</option><option>Matrícula</option></select></div><button class="btn btn-p" onclick="addEmol()">➕</button></div></div>`}
 async function togFin(v){await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').set({ativo:v},{merge:true});pgCfgFin()}
-async function addEmol(){const nm=$('emN').value.trim(),vl=parseFloat($('emV').value)||0;if(!nm||!vl)return;const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();const em=cfg.exists?(cfg.data().emolumentos||[]):[];em.push({nome:nm,valor:vl,periodicidade:$('emP').value});await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').set({emolumentos:em},{merge:true});pgCfgFin()}
+
+async function addEmol(){
+const titulo=$('emN').value.trim();const valor=parseFloat($('emV').value)||0;
+if(!titulo||!valor){notify('Preencha título e valor!','er');return}
+let classes=null;
+if($('emCl').value==='especifica'){
+classes=[...document.querySelectorAll('.cbCl:checked')].map(c=>c.value);
+if(!classes.length){notify('Selecione pelo menos uma classe!','er');return}}
+const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();
+const em=cfg.exists?(cfg.data().emolumentos||[]):[];
+em.push({titulo,nome:titulo,valor,descricao:$('emDesc').value.trim(),periodicidade:$('emP').value,classes});
+await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').set({emolumentos:em},{merge:true});
+notify('Emolumento adicionado!','ok');pgCfgFin()}
+
 async function remEmol(i){const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();const em=cfg.data().emolumentos||[];em.splice(i,1);await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').set({emolumentos:em},{merge:true});pgCfgFin()}
 
-async function pgPagamentos(){const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();if(!cfg.exists||!cfg.data().ativo){$('eC').innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:20px">💰 Desativado <button class="btn btn-p" onclick="eNav(\'cfgFin\')">⚙️</button></div></div>';return}const cs=await db.collection('escolas').doc(CSI).collection('classes').get();$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>💰 Pagamentos</h3></div><div class="card-b"><div class="fp"><select id="fPCl" onchange="ldFPTm()"><option value="">Todas</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select><select id="fPTm"><option value="">Todas</option></select><input type="text" id="fPNm" placeholder="🔍 Nome..." style="flex:1;max-width:160px"><button class="btn btn-p" onclick="ldFPAl()">🔍</button></div><div id="fPDiv"></div></div></div>`}
-async function ldFPTm(){const c=$('fPCl').value;if(!c){$('fPTm').innerHTML='<option value="">Todas</option>';return}const s=await db.collection('escolas').doc(CSI).collection('turmas').where('classe','==',c).get();$('fPTm').innerHTML='<option value="">Todas</option>'+s.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}
-async function ldFPAl(){const cl=$('fPCl').value,tm=$('fPTm').value,nm=($('fPNm').value||'').toLowerCase();const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();let tE=0;(cfg.data().emolumentos||[]).forEach(em=>{tE+=(em.valor||0)});let q=db.collection('escolas').doc(CSI).collection('alunos').where('estado','==','ativo');if(cl)q=q.where('classe','==',cl);if(tm)q=q.where('turma','==',tm);const als=await q.get();const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));const pags=await db.collection('escolas').doc(CSI).collection('pagamentos').get();const pm={};pags.forEach(d=>{const p=d.data();if(!pm[p.alunoId])pm[p.alunoId]=0;pm[p.alunoId]+=(p.valor||0)});let rows='',idx=0;sorted.forEach(d=>{const a=d.data();if(nm&&!a.nome.toLowerCase().includes(nm))return;idx++;const pago=pm[d.id]||0;const div=tE-pago;rows+=`<tr><td>${idx}</td><td>${a.nome}</td><td>${a.classe||''}</td><td>${pago.toLocaleString()} Kz</td><td style="color:${div>0?'var(--s)':'var(--ok)'};font-weight:700">${div>0?div.toLocaleString()+' Kz':'✅'}</td><td><button class="btn btn-sm btn-ok" onclick="regPag('${d.id}','${a.nome.replace(/'/g,"\\'")}')">💰</button></td></tr>`});$('fPDiv').innerHTML=`<table><tr><th>#</th><th>Nome</th><th>Classe</th><th>Pago</th><th>Dívida</th><th></th></tr>${rows}</table>`}
-function regPag(aid,nm){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>💰 ${nm}</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fr"><div class="fg"><label>Tipo</label><select id="pTp"><option>Propina</option><option>Matrícula</option><option>Outro</option></select></div><div class="fg"><label>Mês</label><select id="pMs"><option>Janeiro</option><option>Fevereiro</option><option>Março</option><option>Abril</option><option>Maio</option><option>Junho</option><option>Julho</option><option>Agosto</option><option>Setembro</option><option>Outubro</option><option>Novembro</option><option>Dezembro</option></select></div></div><div class="fr"><div class="fg"><label>Valor (Kz)</label><input type="number" id="pVl"></div><div class="fg"><label>Data</label><input type="date" id="pDt" value="${new Date().toISOString().split('T')[0]}"></div></div></div><div class="mf"><button class="btn btn-p" onclick="svPag('${aid}')">💾</button></div>`;oM()}
-async function svPag(aid){await db.collection('escolas').doc(CSI).collection('pagamentos').add({alunoId:aid,tipo:$('pTp').value,mes:$('pMs').value,valor:parseFloat($('pVl').value)||0,data:$('pDt').value,criadoEm:ts()});notify('OK','ok');cM();ldFPAl()}
+// ===== PAGAMENTOS =====
+async function pgPagamentos(){
+const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();
+if(!cfg.exists||!cfg.data().ativo){$('eC').innerHTML='<div class="card"><div class="card-b" style="text-align:center;padding:20px">💰 Pagamentos desativados <button class="btn btn-p" onclick="eNav(\'cfgFin\')">⚙️</button></div></div>';return}
+const cs=await db.collection('escolas').doc(CSI).collection('classes').get();
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>💰 Pagamentos</h3></div><div class="card-b">
+<div class="fp">
+<select id="fPCl" onchange="ldFPTm()"><option value="">Todas</option>${cs.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}</select>
+<select id="fPTm"><option value="">Todas</option></select>
+<input type="text" id="fPNm" placeholder="🔍 Nome..." style="flex:1;max-width:160px">
+<button class="btn btn-p" onclick="ldFPAl()">🔍</button>
+</div><div id="fPDiv"></div></div></div>`}
 
-async function pgRecDesp(){const[pagsS,finS]=await Promise.all([db.collection('escolas').doc(CSI).collection('pagamentos').get(),db.collection('escolas').doc(CSI).collection('financeiro').get()]);let tRec=0;pagsS.forEach(d=>{tRec+=(d.data().valor||0)});let tDesp=0,oRec=0;finS.forEach(d=>{const f=d.data();if(f.tipo==='despesa')tDesp+=(f.valor||0);if(f.tipo==='receita')oRec+=(f.valor||0)});const saldo=tRec+oRec-tDesp;$('eC').innerHTML=`<div class="fin-grid"><div class="fin-card green"><h2>${(tRec+oRec).toLocaleString()} Kz</h2><p>💰 Receitas</p></div><div class="fin-card red"><h2>${tDesp.toLocaleString()} Kz</h2><p>📉 Despesas</p></div><div class="fin-card blue"><h2>${saldo.toLocaleString()} Kz</h2><p>${saldo>=0?'✅':'⚠️'} Saldo</p></div></div><div class="btn-group"><button class="btn btn-s" onclick="addDesp()">➕ Despesa</button><button class="btn btn-ok" onclick="addRec()">➕ Receita</button></div>`}
+async function ldFPTm(){const c=$('fPCl').value;if(!c){$('fPTm').innerHTML='<option value="">Todas</option>';return}const s=await db.collection('escolas').doc(CSI).collection('turmas').where('classe','==',c).get();$('fPTm').innerHTML='<option value="">Todas</option>'+s.docs.map(d=>`<option>${d.data().nome}</option>`).join('')}
+
+async function ldFPAl(){
+const cl=$('fPCl').value,tm=$('fPTm').value,nm=($('fPNm').value||'').toLowerCase();
+const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();
+const emols=cfg.data().emolumentos||[];
+let q=db.collection('escolas').doc(CSI).collection('alunos').where('estado','==','ativo');
+if(cl)q=q.where('classe','==',cl);if(tm)q=q.where('turma','==',tm);
+const als=await q.get();
+const sorted=[...als.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));
+const pags=await db.collection('escolas').doc(CSI).collection('pagamentos').get();
+const pm={};pags.forEach(d=>{const p=d.data();if(!pm[p.alunoId])pm[p.alunoId]=0;pm[p.alunoId]+=(p.valor||0)});
+let rows='',idx=0;
+sorted.forEach(d=>{
+const a=d.data();if(nm&&!a.nome.toLowerCase().includes(nm))return;
+// Calcular total esperado para a classe deste aluno
+let tE=0;emols.forEach(em=>{if(!em.classes||em.classes.length===0||em.classes.includes(a.classe))tE+=(em.valor||0)});
+idx++;const pago=pm[d.id]||0;const div=tE-pago;
+rows+=`<tr><td>${idx}</td><td>${a.nome}</td><td>${a.classe||''}</td><td>${tE.toLocaleString()} Kz</td><td>${pago.toLocaleString()} Kz</td><td style="color:${div>0?'var(--s)':'var(--ok)'};font-weight:700">${div>0?div.toLocaleString()+' Kz':'✅'}</td><td><button class="btn btn-sm btn-ok" onclick="regPag('${d.id}','${a.nome.replace(/'/g,"\\'")}','${a.classe||''}')">💰</button></td></tr>`});
+$('fPDiv').innerHTML=`<table><tr><th>#</th><th>Nome</th><th>Classe</th><th>Devido</th><th>Pago</th><th>Dívida</th><th></th></tr>${rows}</table>`}
+
+async function regPag(aid,nm,classe){
+const cfg=await db.collection('escolas').doc(CSI).collection('config').doc('financeiro').get();
+const emols=(cfg.data().emolumentos||[]).filter(em=>!em.classes||em.classes.length===0||em.classes.includes(classe));
+$('mB').className='modal';
+$('mB').innerHTML=`<div class="mh"><h3>💰 ${nm}</h3><button class="mx" onclick="cM()">×</button></div><div class="mb">
+<div class="fg"><label>Emolumento</label><select id="pTp">${emols.map(em=>`<option data-valor="${em.valor}">${em.titulo||em.nome}</option>`).join('')}<option value="custom">Outro (manual)</option></select></div>
+<div class="fr"><div class="fg"><label>Mês</label><select id="pMs"><option>Janeiro</option><option>Fevereiro</option><option>Março</option><option>Abril</option><option>Maio</option><option>Junho</option><option>Julho</option><option>Agosto</option><option>Setembro</option><option>Outubro</option><option>Novembro</option><option>Dezembro</option></select></div><div class="fg"><label>Valor (Kz)</label><input type="number" id="pVl"></div></div>
+<div class="fg"><label>Data</label><input type="date" id="pDt" value="${new Date().toISOString().split('T')[0]}"></div>
+</div><div class="mf"><button class="btn btn-p" onclick="svPag('${aid}')">💾</button></div>`;oM();
+$('pTp').addEventListener('change',e=>{const v=e.target.selectedOptions[0]?.dataset?.valor;if(v)$('pVl').value=v});
+const fv=emols[0]?.valor;if(fv)$('pVl').value=fv}
+
+async function svPag(aid){
+await db.collection('escolas').doc(CSI).collection('pagamentos').add({alunoId:aid,tipo:$('pTp').value,mes:$('pMs').value,valor:parseFloat($('pVl').value)||0,data:$('pDt').value,criadoEm:ts()});
+notify('Pagamento registado!','ok');cM();ldFPAl()}
+
+// ===== RECEITAS/DESPESAS =====
+async function pgRecDesp(){
+const[pagsS,finS]=await Promise.all([db.collection('escolas').doc(CSI).collection('pagamentos').get(),db.collection('escolas').doc(CSI).collection('financeiro').get()]);
+let tRec=0;pagsS.forEach(d=>{tRec+=(d.data().valor||0)});
+let tDesp=0,oRec=0;
+finS.forEach(d=>{const f=d.data();if(f.tipo==='despesa')tDesp+=(f.valor||0);if(f.tipo==='receita')oRec+=(f.valor||0)});
+const saldo=tRec+oRec-tDesp;
+$('eC').innerHTML=`<div class="fin-grid">
+<div class="fin-card green"><h2>${(tRec+oRec).toLocaleString()} Kz</h2><p>💰 Receitas</p></div>
+<div class="fin-card red"><h2>${tDesp.toLocaleString()} Kz</h2><p>📉 Despesas</p></div>
+<div class="fin-card blue"><h2>${saldo.toLocaleString()} Kz</h2><p>${saldo>=0?'✅':'⚠️'} Saldo</p></div>
+</div>
+<div class="btn-group"><button class="btn btn-s" onclick="addDesp()">➕ Despesa</button><button class="btn btn-ok" onclick="addRec()">➕ Outra Receita</button></div>`}
+
 function addDesp(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Despesa</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Descrição</label><input id="dDs"></div><div class="fr"><div class="fg"><label>Valor</label><input type="number" id="dVl"></div><div class="fg"><label>Data</label><input type="date" id="dDt" value="${new Date().toISOString().split('T')[0]}"></div></div><div class="fg"><label>Categoria</label><select id="dCt"><option>Material</option><option>Manutenção</option><option>Salários</option><option>Outro</option></select></div></div><div class="mf"><button class="btn btn-s" onclick="svDesp()">💾</button></div>`;oM()}
 async function svDesp(){await db.collection('escolas').doc(CSI).collection('financeiro').add({tipo:'despesa',descricao:$('dDs').value.trim(),valor:parseFloat($('dVl').value)||0,data:$('dDt').value,categoria:$('dCt').value,criadoEm:ts()});cM();pgRecDesp()}
 function addRec(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Receita</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Descrição</label><input id="rDs"></div><div class="fr"><div class="fg"><label>Valor</label><input type="number" id="rVl"></div><div class="fg"><label>Data</label><input type="date" id="rDt" value="${new Date().toISOString().split('T')[0]}"></div></div></div><div class="mf"><button class="btn btn-ok" onclick="svRec()">💾</button></div>`;oM()}
 async function svRec(){await db.collection('escolas').doc(CSI).collection('financeiro').add({tipo:'receita',descricao:$('rDs').value.trim(),valor:parseFloat($('rVl').value)||0,data:$('rDt').value,criadoEm:ts()});cM();pgRecDesp()}
 
 // ===== PATRIMÓNIO =====
-async function pgPatrimonio(){const s=await db.collection('escolas').doc(CSI).collection('patrimonio').get();let r='',tV=0;s.forEach(d=>{const p=d.data();tV+=(p.valor||0);r+=`<tr><td>${p.descricao}</td><td>${p.categoria||''}</td><td>${p.quantidade||1}</td><td>${(p.valor||0).toLocaleString()}</td><td><button class="btn btn-sm btn-s" onclick="delC('patrimonio','${d.id}',pgPatrimonio)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="sg"><div class="sc"><div class="sci tl">🏗️</div><div class="scn"><h3>${s.size}</h3><p>Itens</p></div></div><div class="sc"><div class="sci yl">💰</div><div class="scn"><h3 style="font-size:.9em">${tV.toLocaleString()}</h3><p>Kz</p></div></div></div><div class="card"><div class="card-h"><h3>🏗️ Património</h3><button class="btn btn-p" onclick="addPat()">➕</button></div><div class="card-b"><table><tr><th>Descrição</th><th>Categoria</th><th>Qtd</th><th>Valor</th><th></th></tr>${r||'<tr><td colspan="5">Nenhum</td></tr>'}</table></div></div>`}
-function addPat(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Item</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Descrição</label><input id="ptDs"></div><div class="fr3"><div class="fg"><label>Categoria</label><select id="ptCt"><option>Mobiliário</option><option>Equipamento</option><option>Informática</option><option>Outro</option></select></div><div class="fg"><label>Qtd</label><input type="number" id="ptQt" value="1"></div><div class="fg"><label>Valor</label><input type="number" id="ptVl"></div></div></div><div class="mf"><button class="btn btn-p" onclick="svPat()">💾</button></div>`;oM()}
+async function pgPatrimonio(){const s=await db.collection('escolas').doc(CSI).collection('patrimonio').get();let r='',tV=0;s.forEach(d=>{const p=d.data();tV+=(p.valor||0);r+=`<tr><td>${p.descricao}</td><td>${p.categoria||''}</td><td>${p.quantidade||1}</td><td>${(p.valor||0).toLocaleString()}</td><td><button class="btn btn-sm btn-s" onclick="delC('patrimonio','${d.id}',pgPatrimonio)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="sg"><div class="sc"><div class="sci tl">🏗️</div><div class="scn"><h3>${s.size}</h3><p>Itens</p></div></div><div class="sc"><div class="sci yl">💰</div><div class="scn"><h3 style="font-size:.85em">${tV.toLocaleString()}</h3><p>Kz</p></div></div></div><div class="card"><div class="card-h"><h3>🏗️ Património</h3><button class="btn btn-p" onclick="addPat()">➕</button></div><div class="card-b"><table><tr><th>Descrição</th><th>Categoria</th><th>Qtd</th><th>Valor</th><th></th></tr>${r||'<tr><td colspan="5">—</td></tr>'}</table></div></div>`}
+function addPat(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Descrição</label><input id="ptDs"></div><div class="fr3"><div class="fg"><label>Categoria</label><select id="ptCt"><option>Mobiliário</option><option>Equipamento</option><option>Informática</option><option>Outro</option></select></div><div class="fg"><label>Qtd</label><input type="number" id="ptQt" value="1"></div><div class="fg"><label>Valor</label><input type="number" id="ptVl"></div></div></div><div class="mf"><button class="btn btn-p" onclick="svPat()">💾</button></div>`;oM()}
 async function svPat(){await db.collection('escolas').doc(CSI).collection('patrimonio').add({descricao:$('ptDs').value.trim(),categoria:$('ptCt').value,quantidade:parseInt($('ptQt').value)||1,valor:parseFloat($('ptVl').value)||0,criadoEm:ts()});cM();pgPatrimonio()}
 
 // ===== FALTAS =====
-async function pgFaltasF(){const[us,fs]=await Promise.all([db.collection('escolas').doc(CSI).collection('usuarios').get(),db.collection('escolas').doc(CSI).collection('faltas').get()]);const fp={};fs.forEach(d=>{fp[d.data().userId]=(fp[d.data().userId]||0)+1});const sorted=[...us.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const u=d.data();r+=`<tr><td>${u.nome}</td><td>${PN[u.perfil]||u.perfil}</td><td><strong>${fp[d.id]||0}</strong></td><td><button class="btn btn-sm btn-s" onclick="regFalta('${d.id}')">➕</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📊 Faltas Funcionários</h3></div><div class="card-b"><table><tr><th>Nome</th><th>Perfil</th><th>Faltas</th><th></th></tr>${r}</table></div></div>`}
+async function pgFaltasF(){const[us,fs]=await Promise.all([db.collection('escolas').doc(CSI).collection('usuarios').get(),db.collection('escolas').doc(CSI).collection('faltas').get()]);const fp={};fs.forEach(d=>{fp[d.data().userId]=(fp[d.data().userId]||0)+1});const sorted=[...us.docs].sort((a,b)=>(a.data().nome||'').localeCompare(b.data().nome||''));let r='';sorted.forEach(d=>{const u=d.data();r+=`<tr><td>${u.nome}</td><td>${PN[u.perfil]||u.perfil}</td><td><strong>${fp[d.id]||0}</strong></td><td><button class="btn btn-sm btn-s" onclick="regFalta('${d.id}')">➕</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📊 Faltas</h3></div><div class="card-b"><table><tr><th>Nome</th><th>Perfil</th><th>Faltas</th><th></th></tr>${r}</table></div></div>`}
 async function regFalta(uid){await db.collection('escolas').doc(CSI).collection('faltas').add({userId:uid,data:new Date().toISOString().split('T')[0],criadoEm:ts()});pgFaltasF()}
 
 // ===== EVENTOS =====
-async function pgEventos(){const s=await db.collection('escolas').doc(CSI).collection('eventos').orderBy('data','desc').get();let r='';s.forEach(d=>{const e=d.data();r+=`<tr><td>${e.data}</td><td>${e.titulo}</td><td>${e.tipo}</td><td><button class="btn btn-sm btn-s" onclick="delC('eventos','${d.id}',pgEventos)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📅 Eventos</h3><button class="btn btn-p" onclick="addEv()">➕</button></div><div class="card-b"><table><tr><th>Data</th><th>Título</th><th>Tipo</th><th></th></tr>${r||'<tr><td colspan="4">Nenhum</td></tr>'}</table></div></div>`}
-function addEv(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕ Evento</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Título</label><input id="evT"></div><div class="fr"><div class="fg"><label>Data</label><input type="date" id="evD"></div><div class="fg"><label>Tipo</label><select id="evP"><option>Reunião</option><option>Exame</option><option>Feriado</option><option>Outro</option></select></div></div></div><div class="mf"><button class="btn btn-p" onclick="svEv()">💾</button></div>`;oM()}
+async function pgEventos(){const s=await db.collection('escolas').doc(CSI).collection('eventos').orderBy('data','desc').get();let r='';s.forEach(d=>{const e=d.data();r+=`<tr><td>${e.data}</td><td>${e.titulo}</td><td>${e.tipo}</td><td><button class="btn btn-sm btn-s" onclick="delC('eventos','${d.id}',pgEventos)">🗑️</button></td></tr>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📅 Eventos</h3><button class="btn btn-p" onclick="addEv()">➕</button></div><div class="card-b"><table><tr><th>Data</th><th>Título</th><th>Tipo</th><th></th></tr>${r||'<tr><td colspan="4">—</td></tr>'}</table></div></div>`}
+function addEv(){$('mB').className='modal';$('mB').innerHTML=`<div class="mh"><h3>➕</h3><button class="mx" onclick="cM()">×</button></div><div class="mb"><div class="fg"><label>Título</label><input id="evT"></div><div class="fr"><div class="fg"><label>Data</label><input type="date" id="evD"></div><div class="fg"><label>Tipo</label><select id="evP"><option>Reunião</option><option>Exame</option><option>Feriado</option><option>Outro</option></select></div></div></div><div class="mf"><button class="btn btn-p" onclick="svEv()">💾</button></div>`;oM()}
 async function svEv(){await db.collection('escolas').doc(CSI).collection('eventos').add({titulo:$('evT').value.trim(),data:$('evD').value,tipo:$('evP').value,criadoEm:ts()});cM();pgEventos()}
 
 // ===== RELATÓRIOS =====
-async function pgRels(){$('eC').innerHTML=`<div class="sg"><div class="sc" style="cursor:pointer;flex-direction:column;padding:16px;text-align:center" onclick="exAlXL()"><div style="font-size:1.8em">👨‍🎓</div><p style="font-weight:700;margin-top:3px">Alunos XLSX</p></div><div class="sc" style="cursor:pointer;flex-direction:column;padding:16px;text-align:center" onclick="relGeral()"><div style="font-size:1.8em">📋</div><p style="font-weight:700;margin-top:3px">Geral PDF</p></div></div>`}
+async function pgRels(){$('eC').innerHTML=`<div class="sg">
+<div class="sc" style="cursor:pointer;flex-direction:column;padding:16px;text-align:center" onclick="exAlXL()"><div style="font-size:1.8em">👨‍🎓</div><p style="font-weight:700;margin-top:3px;font-size:.78em">Alunos Completo XLSX</p></div>
+<div class="sc" style="cursor:pointer;flex-direction:column;padding:16px;text-align:center" onclick="exUsXL()"><div style="font-size:1.8em">👥</div><p style="font-weight:700;margin-top:3px;font-size:.78em">Funcionários XLSX</p></div>
+<div class="sc" style="cursor:pointer;flex-direction:column;padding:16px;text-align:center" onclick="stXL()"><div style="font-size:1.8em">📊</div><p style="font-weight:700;margin-top:3px;font-size:.78em">Estatísticas XLSX</p></div>
+<div class="sc" style="cursor:pointer;flex-direction:column;padding:16px;text-align:center" onclick="stPDF()"><div style="font-size:1.8em">📄</div><p style="font-weight:700;margin-top:3px;font-size:.78em">Estatísticas PDF</p></div>
+<div class="sc" style="cursor:pointer;flex-direction:column;padding:16px;text-align:center" onclick="relGeral()"><div style="font-size:1.8em">📋</div><p style="font-weight:700;margin-top:3px;font-size:.78em">Relatório Geral PDF</p></div>
+</div>`}
+
 async function relGeral(){const{jsPDF}=window.jspdf;const pdf=new jsPDF();pdf.setFontSize(13);pdf.text('RELATÓRIO GERAL - '+CS.nome,105,14,{align:'center'});const[als,uss]=await Promise.all([db.collection('escolas').doc(CSI).collection('alunos').get(),db.collection('escolas').doc(CSI).collection('usuarios').get()]);pdf.setFontSize(10);pdf.text(`Alunos: ${als.size} | Funcionários: ${uss.size}`,15,25);pdf.save('Relatorio.pdf');notify('PDF!','ok')}
 
+// ===== BACKUP ESCOLA =====
+async function pgBkpEsc(){
+$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>💾 Backup e Restauro da Escola</h3></div><div class="card-b" style="text-align:center;padding:15px">
+<div class="btn-group" style="justify-content:center">
+<button class="btn btn-ok" onclick="bkpEscJSON()">💾 Backup JSON</button>
+<button class="btn btn-ok" onclick="bkpEscXL()">📊 Backup XLSX</button>
+</div>
+<div class="divider"></div>
+<p style="font-size:.75em;color:var(--txl);margin-bottom:5px">Restaurar dados da escola:</p>
+<input type="file" id="restEscF" accept=".json" style="margin-top:5px;font-size:.75em">
+<button class="btn btn-wn mt-1" onclick="restaurarEsc()">🔄 Restaurar</button>
+</div></div>`}
+
+async function bkpEscJSON(){
+const data={escola:CS,nomeEscola:CS.nome,cols:{}};
+for(const col of['usuarios','alunos','notas','classes','turmas','disciplinas','turnos','anosLetivos','config','atribuicoes','histNotas','pagamentos','financeiro','patrimonio','eventos','faltas','presencas','mensagens','logs']){
+const snap=await db.collection('escolas').doc(CSI).collection(col).get();
+data.cols[col]=snap.docs.map(d=>({...d.data()}))}
+const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`Backup_${CS.nome.replace(/\s/g,'_')}_${new Date().toISOString().split('T')[0]}.json`;a.click();URL.revokeObjectURL(url);notify('Backup JSON!','ok')}
+
+async function bkpEscXL(){
+const wb=XLSX.utils.book_new();
+const als=await db.collection('escolas').doc(CSI).collection('alunos').get();
+const ad=[['Nome','Classe','Turma','BI','Estado']];als.forEach(d=>{const a=d.data();ad.push([a.nome,a.classe,a.turma,a.bi,a.estado])});
+XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ad),'Alunos');
+const us=await db.collection('escolas').doc(CSI).collection('usuarios').get();
+const ud=[['Nome','Perfil','BI','Tel']];us.forEach(d=>{const u=d.data();ud.push([u.nome,u.perfil,u.bi,u.telefone])});
+XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ud),'Funcionários');
+XLSX.writeFile(wb,`Backup_${CS.nome.replace(/\s/g,'_')}.xlsx`);notify('XLSX!','ok')}
+
+async function restaurarEsc(){
+const f=$('restEscF')?.files[0];if(!f){notify('Selecione ficheiro!','er');return}
+if(!confirm('Restaurar dados? Pode duplicar registos existentes.'))return;
+const rd=new FileReader();
+rd.onload=async(e)=>{try{const data=JSON.parse(e.target.result);
+for(const[col,docs]of Object.entries(data.cols||{})){
+for(const doc of docs)await db.collection('escolas').doc(CSI).collection(col).add(doc)}
+notify('Restaurado com sucesso!','ok')}catch(err){notify('Erro: '+err.message,'er')}};
+rd.readAsText(f)}
+
 // ===== LOGS =====
-async function pgLogs(){const s=await db.collection('escolas').doc(CSI).collection('logs').orderBy('criadoEm','desc').limit(80).get();let r='';s.forEach(d=>{const l=d.data();r+=`<div class="log-item"><span class="log-time">${l.data?new Date(l.data).toLocaleString('pt-AO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''}</span><strong>${l.usuario}</strong> — ${l.acao}</div>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📋 Atividades</h3></div><div class="card-b">${r||'<p>Sem registos</p>'}</div></div>`}
+async function pgLogs(){const s=await db.collection('escolas').doc(CSI).collection('logs').orderBy('criadoEm','desc').limit(80).get();let r='';s.forEach(d=>{const l=d.data();r+=`<div class="log-item"><span style="color:var(--txl);font-size:.68em;margin-right:4px">${l.data?new Date(l.data).toLocaleString('pt-AO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):''}</span><strong>${l.usuario}</strong> — ${l.acao}</div>`});$('eC').innerHTML=`<div class="card"><div class="card-h"><h3>📋 Atividades</h3></div><div class="card-b">${r||'<p>—</p>'}</div></div>`}
 
 // ===== MENSAGENS =====
-async function pgMsgs(){const us=await db.collection('escolas').doc(CSI).collection('usuarios').get();let uO='<option value="todos">📢 Todos</option>';us.forEach(d=>{if(d.id!==CU.id)uO+=`<option value="${d.id}">${d.data().nome}</option>`});const ms=await db.collection('escolas').doc(CSI).collection('mensagens').orderBy('criadoEm','desc').limit(15).get();let mh='';ms.forEach(d=>{const m=d.data();const isMe=m.deId===CU.id,isFor=m.paraId===CU.id;if(!isMe&&!isFor)return;mh+=`<div style="padding:5px;border-bottom:1px solid #f0f0f0;font-size:.75em"><strong>${isMe?'→ '+m.paraNome:m.deNome}</strong> — ${m.assunto||''}<br><span style="color:var(--txl)">${(m.mensagem||'').substring(0,60)}</span></div>`});$('eC').innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="card"><div class="card-h"><h3>✉️</h3></div><div class="card-b"><div class="fg"><select id="msgP">${uO}</select></div><div class="fg"><input id="msgA" placeholder="Assunto"></div><div class="fg"><textarea id="msgT" rows="3"></textarea></div><button class="btn btn-p" onclick="sMsg()">📨</button></div></div><div class="card"><div class="card-h"><h3>📬</h3></div><div class="card-b" style="max-height:300px;overflow-y:auto">${mh||'<p>—</p>'}</div></div></div>`}
+async function pgMsgs(){const us=await db.collection('escolas').doc(CSI).collection('usuarios').get();let uO='<option value="todos">📢 Todos</option>';us.forEach(d=>{if(d.id!==CU.id)uO+=`<option value="${d.id}">${d.data().nome}</option>`});const ms=await db.collection('escolas').doc(CSI).collection('mensagens').orderBy('criadoEm','desc').limit(15).get();let mh='';ms.forEach(d=>{const m=d.data();const isMe=m.deId===CU.id,isFor=m.paraId===CU.id;if(!isMe&&!isFor)return;mh+=`<div style="padding:4px;border-bottom:1px solid #f0f0f0;font-size:.72em"><strong>${isMe?'→ '+m.paraNome:m.deNome}</strong> — ${m.assunto||''}<br><span style="color:var(--txl)">${(m.mensagem||'').substring(0,60)}</span></div>`});$('eC').innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><div class="card"><div class="card-h"><h3>✉️</h3></div><div class="card-b"><div class="fg"><select id="msgP">${uO}</select></div><div class="fg"><input id="msgA" placeholder="Assunto"></div><div class="fg"><textarea id="msgT" rows="3"></textarea></div><button class="btn btn-p" onclick="sMsg()">📨</button></div></div><div class="card"><div class="card-h"><h3>📬</h3></div><div class="card-b" style="max-height:280px;overflow-y:auto">${mh||'<p>—</p>'}</div></div></div>`}
 async function sMsg(){const para=$('msgP').value,msg=$('msgT').value.trim();if(!msg)return;const base={deId:CU.id,deNome:CU.nome,assunto:$('msgA').value.trim(),mensagem:msg,lida:false,criadoEm:ts()};if(para==='todos'){const s=await db.collection('escolas').doc(CSI).collection('usuarios').get();for(const d of s.docs)if(d.id!==CU.id)await db.collection('escolas').doc(CSI).collection('mensagens').add({...base,paraId:d.id,paraNome:d.data().nome})}else{const ud=await db.collection('escolas').doc(CSI).collection('usuarios').doc(para).get();await db.collection('escolas').doc(CSI).collection('mensagens').add({...base,paraId:para,paraNome:ud.data().nome})}notify('Enviada!','ok');$('msgA').value=$('msgT').value='';pgMsgs()}
 
 // INICIAR SISTEMA
